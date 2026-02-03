@@ -90,50 +90,55 @@
     }
 
     async function loadFarmData() {
-        const listContainer = document.getElementById('biomass-list');
-        try {
-            const [rawRes, coordRes] = await Promise.all([
-                fetch(`${SCRIPT_URL}?sheet=rawdata`),
-                fetch(`${SCRIPT_URL}?sheet=Paddock_Coordinates`)
-            ]);
-            
-            const rawJson = await rawRes.json();
-            const coordJson = await coordRes.json();
+        const listContainer = document.getElementById('biomass-list');
+        try {
+            const [rawRes, coordRes] = await Promise.all([
+                fetch(`${SCRIPT_URL}?sheet=rawdata`),
+                fetch(`${SCRIPT_URL}?sheet=Paddock_Coordinates`)
+            ]);
+            
+            const rawJson = await rawRes.json();
+            const coordJson = await coordRes.json();
 
-            const groups = {};
-            rawJson.data.forEach(r => {
-                const name = String(r.paddock_name).trim();
-                const cover = parseFloat(r.cover);
-                if (name && !isNaN(cover)) {
-                    if (!groups[name]) groups[name] = [];
-                    groups[name].push({ date: new Date(r.date), cover: cover });
-                }
-            });
+            const groups = {};
+            rawJson.data.forEach(r => {
+                // Rename "12" to "TP12" during the grouping phase
+                let name = String(r.paddock_name).trim();
+                if (name === "12") name = "TP12"; 
 
-            masterData = Object.keys(groups).map(name => {
-                const entries = groups[name].sort((a,b) => b.date - a.date);
-                const latest = entries[0];
-                const prev = entries[1] || null;
-                const c = coordJson.data.find(x => String(x["Paddock Name"]).trim() === name);
-                
-                let growth = null, days = null;
-                if (prev) {
-                    days = Math.ceil(Math.abs(latest.date - prev.date) / 86400000);
-                    if (days > 0 && days <= 12) {
-                        growth = ((latest.cover - prev.cover) / days).toFixed(1);
-                    }
-                }
-                return { name, latest, prev, growth, days, lat: c ? c.Latitude : null, lon: c ? c.Longitude : null };
-            });
+                const cover = parseFloat(r.cover);
+                if (name && !isNaN(cover)) {
+                    if (!groups[name]) groups[name] = [];
+                    groups[name].push({ date: new Date(r.date), cover: cover });
+                }
+            });
 
-            masterData.sort((a,b) => b.latest.cover - a.latest.cover);
-            renderCards(masterData);
+            masterData = Object.keys(groups).map(name => {
+                const entries = groups[name].sort((a,b) => b.date - a.date);
+                const latest = entries[0];
+                const prev = entries[1] || null;
 
-        } catch (e) {
-            listContainer.innerHTML = `<div style="padding:20px; color:red;">Connection Error. Check Script URL.</div>`;
-        }
-    }
+                // Ensure coordinate lookup also maps to the renamed "TP12"
+                const lookupName = (name === "TP12") ? "12" : name;
+                const c = coordJson.data.find(x => String(x["Paddock Name"]).trim() === lookupName || String(x["Paddock Name"]).trim() === name);
+                
+                let growth = null, days = null;
+                if (prev) {
+                    days = Math.ceil(Math.abs(latest.date - prev.date) / 86400000);
+                    if (days > 0 && days <= 12) {
+                        growth = ((latest.cover - prev.cover) / days).toFixed(1);
+                    }
+                }
+                return { name, latest, prev, growth, days, lat: c ? c.Latitude : null, lon: c ? c.Longitude : null };
+            });
 
+            masterData.sort((a,b) => b.latest.cover - a.latest.cover);
+            renderCards(masterData);
+
+        } catch (e) {
+            listContainer.innerHTML = `<div style="padding:20px; color:red;">Connection Error. Check Script URL.</div>`;
+        }
+    }
     function renderCards(data) {
         const list = document.getElementById('biomass-list');
         list.innerHTML = "";
@@ -180,6 +185,7 @@
 </script>
 </body>
 </html>
+
 
 
 
