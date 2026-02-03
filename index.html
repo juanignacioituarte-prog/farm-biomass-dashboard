@@ -11,10 +11,9 @@
         body { margin: 0; padding: 0; }
         #map { height: 100vh; width: 100%; }
         
-        /* Coordinate and Zoom Display Style */
         #map-info {
             position: absolute;
-            bottom: 20px;
+            bottom: 30px; /* Shifted up slightly to clear the scale bar */
             left: 10px;
             z-index: 1000;
             background: rgba(255, 255, 255, 0.9);
@@ -23,7 +22,7 @@
             font-family: 'Courier New', Courier, monospace;
             font-size: 12px;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            pointer-events: none; /* Allows clicks to pass through to the map */
+            pointer-events: none;
             border: 1px solid #ccc;
         }
 
@@ -45,7 +44,7 @@
 <div class="map-title">NDVI Project Explorer</div>
 
 <div id="map-info">
-    Lat: 0.0000, Lon: 0.0000 | Zoom: 0
+    Lat: -42.6794, Lon: 172.8791 | Zoom: 14
 </div>
 
 <div id="map"></div>
@@ -53,23 +52,24 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // 1. Initialize Map
-    const map = L.map('map').setView([0, 0], 3);
+    // 1. Initialize Map at specified coordinates and zoom
+    const map = L.map('map').setView([-42.6794, 172.8791], 14);
 
     // 2. Base Layers
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-        attribution: '© Google'
     });
 
-    // 3. Earth Engine Layers
+    // Defaulting to Satellite view as it's usually better for NDVI comparison
+    const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        attribution: '© Google'
+    }).addTo(map);
+
+    // 3. Earth Engine Layers (Note: URLs expire periodically)
     const ndviLayer = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/8e38d6aa273129e41523f1865a8491f9-b285f5b7f76bc48d602f603492ca9976/tiles/{z}/{x}/{y}', {
         attribution: 'Google Earth Engine',
-        opacity: 0.7
+        opacity: 0.6
     }).addTo(map);
 
     const stripLineLayer = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/9fb0cfd478686a75bb9e68b03ae934fd-eff7461a1b6c89d323447acaa3ca2925/tiles/{z}/{x}/{y}', {
@@ -81,13 +81,17 @@
     }).addTo(map);
 
     // 4. Controls
-    const baseMaps = { "Street Map": osm, "Satellite": satellite };
+    const baseMaps = { "Satellite": satellite, "Street Map": osm };
     const overlayMaps = { 
         "NDVI Map": ndviLayer, 
         "Strip Lines": stripLineLayer, 
         "Paddock Borders": bordersLayer 
     };
+    
     L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
+    
+    // Add a metric scale bar
+    L.control.scale({ imperial: false }).addTo(map);
 
     // 5. COORDINATE & ZOOM TRACKER LOGIC
     const infoBox = document.getElementById('map-info');
@@ -99,14 +103,8 @@
         infoBox.innerHTML = `Lat: ${lat}, Lon: ${lng} | Zoom: ${zoom}`;
     }
 
-    // Update on mouse move
     map.on('mousemove', updateInfo);
-
-    // Update on zoom change
     map.on('zoomend', () => updateInfo());
-
-    // Initialize display
-    updateInfo();
 
 </script>
 
