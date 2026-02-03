@@ -5,159 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Farm Biomass Dashboard</title>
     
-    <!-- Load Earth Engine API -->
     <script src="https://cdn.jsdelivr.net/npm/@google/earthengine@0.1.321/build/earth-engine.js"></script>
     
-    <!-- Load Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .header {
-            background: #2c3e50;
-            color: white;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        
-        .content {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 20px;
-        }
-        
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        
-        #map {
-            height: 600px;
-            width: 100%;
-            border-radius: 5px;
-        }
-        
-        button {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 5px;
-        }
-        
-        button:hover {
-            background: #2980b9;
-        }
-        
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        
-        th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        
-        th {
-            background: #f8f9fa;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #666;
-        }
-        
-        .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            display: none;
-        }
-        
-        .map-overlay {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 4px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
+        body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: #1a2a3a; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .content { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .content { grid-template-columns: 1fr; } }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #map { height: 600px; width: 100%; border-radius: 5px; background: #e0e0e0; }
+        .controls { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        #initBtn { background: #2ecc71; }
+        #initBtn:hover { background: #27ae60; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; color: #333; }
+        .status-overlay { padding: 10px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; margin-top: 10px; font-size: 0.9em; }
+        .loading { text-align: center; padding: 20px; color: #666; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Farm Biomass Dashboard</h1>
-            <p>Google Earth Engine NDVI Map with Biomass Data</p>
+            <p>Satellite NDVI Insights & Paddock Data</p>
         </div>
         
         <div class="content">
-            <!-- Left: GEE Map -->
             <div class="card">
-                <h2>Google Earth Engine Map</h2>
-                <div>
-                    <button onclick="initGEE()" id="initBtn">Initialize GEE</button>
-                    <button onclick="loadGeeMap()" id="mapBtn" disabled>Load NDVI Map</button>
-                    <button onclick="loadBiomassData()">Load Biomass Data</button>
+                <div class="controls">
+                    <button onclick="initGEE()" id="initBtn">1. Login to Google</button>
+                    <button onclick="loadGeeMap()" id="mapBtn" disabled>2. Load NDVI Map</button>
+                    <button onclick="loadBiomassData()">Refresh Biomass Data</button>
                 </div>
-                
                 <div id="map"></div>
-                <div class="map-overlay" id="mapStatus">Click "Initialize GEE" to start</div>
+                <div class="status-overlay" id="mapStatus">Ready. Please initialize GEE to view satellite imagery.</div>
             </div>
             
-            <!-- Right: Data -->
             <div class="card">
-                <h2>Biomass Data</h2>
-                <select id="cloudFilter" onchange="loadBiomassData()">
-                    <option value="40">Standard (≤40% cloud)</option>
-                    <option value="30">Strict (≤30% cloud)</option>
-                    <option value="50">Loose (≤50% cloud)</option>
+                <h2>Biomass Standings</h2>
+                <label for="cloudFilter">Cloud Tolerance:</label>
+                <select id="cloudFilter" onchange="loadBiomassData()" style="padding: 5px; margin-bottom: 15px;">
+                    <option value="40">Standard (≤40%)</option>
+                    <option value="30">Strict (≤30%)</option>
+                    <option value="50">Loose (≤50%)</option>
                 </select>
                 
-                <div class="loading" id="loading">Loading data...</div>
-                <div class="error" id="error"></div>
-                
+                <div id="loading" class="loading" style="display:none;">Fetching Sheets data...</div>
                 <table>
                     <thead>
                         <tr>
-                            <th>Paddock Name</th>
-                            <th>Est. kg DM/ha</th>
-                            <th>Date of Reading</th>
+                            <th>Paddock</th>
+                            <th>kg DM/ha</th>
+                            <th>Last Reading</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
-                        <!-- Data will go here -->
-                    </tbody>
+                        </tbody>
                 </table>
             </div>
         </div>
@@ -165,214 +76,138 @@
 
     <script>
         // ===== CONFIGURATION =====
-        const SHEETS_API = 'https://script.google.com/macros/s/AKfycbzZ9KgIFLPJThJEmjvERPzsAFbs7J0_rJt8N6ngAAkmLBDRDVGzyGZ8hcdvIiC0fRIr/exec';
         const GEE_CLIENT_ID = '895621183163-ldkkoljnshjipv83jv4s91b2v3k7g7bk.apps.googleusercontent.com';
         const PADDOCKS_ASSET = 'projects/ndvi-project-484422/assets/myfarm_paddocks';
+        const SHEETS_API = 'https://script.google.com/macros/s/AKfycbzZ9KgIFLPJThJEmjvERPzsAFbs7J0_rJt8N6ngAAkmLBDRDVGzyGZ8hcdvIiC0fRIr/exec';
         
-        // ===== VARIABLES =====
         let map = null;
-        let biomassData = [];
-        
-        // ===== INITIALIZE PAGE =====
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize basic map
-            map = L.map('map').setView([-40.9006, 174.8860], 10);
+        let ndviLayer = null;
+
+        // Initialize Leaflet
+        document.addEventListener('DOMContentLoaded', () => {
+            map = L.map('map').setView([-40.9006, 174.8860], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap'
             }).addTo(map);
-            
-            // Load biomass data
             loadBiomassData();
         });
-        
-        // ===== GEE FUNCTIONS =====
+
+        // 1. Authenticate with Google
         async function initGEE() {
-            const initBtn = document.getElementById('initBtn');
-            const mapBtn = document.getElementById('mapBtn');
             const status = document.getElementById('mapStatus');
-            
-            initBtn.disabled = true;
-            initBtn.textContent = 'Initializing...';
-            status.textContent = 'Initializing Google Earth Engine...';
-            
+            const initBtn = document.getElementById('initBtn');
+            status.textContent = 'Opening Google Login Popup...';
+
             try {
-                // Initialize Earth Engine with your Client ID
                 await new Promise((resolve, reject) => {
-                    ee.data.authenticateViaOauth(
-                        GEE_CLIENT_ID,
-                        function() {
+                    ee.data.authenticateViaPopup(
+                        () => {
                             ee.initialize(null, null, resolve, reject);
                         },
-                        function(error) {
-                            reject(error);
-                        }
+                        (err) => reject(err)
                     );
                 });
-                
-                initBtn.textContent = 'GEE Initialized';
-                mapBtn.disabled = false;
-                status.textContent = 'Google Earth Engine ready. Click "Load NDVI Map"';
-                
-            } catch (error) {
-                console.error('GEE Init Error:', error);
-                initBtn.textContent = 'Failed - Try Again';
-                initBtn.disabled = false;
-                status.textContent = 'Failed to initialize GEE: ' + error.message;
+
+                status.textContent = 'Authenticated successfully!';
+                initBtn.textContent = 'Logged In';
+                initBtn.disabled = true;
+                document.getElementById('mapBtn').disabled = false;
+            } catch (err) {
+                console.error(err);
+                status.textContent = 'Login failed. Check if popups are blocked or if your URL is authorized in Google Console.';
             }
         }
-        
+
+        // 2. Load the NDVI Map from GEE
         async function loadGeeMap() {
-            const mapBtn = document.getElementById('mapBtn');
             const status = document.getElementById('mapStatus');
+            const mapBtn = document.getElementById('mapBtn');
             
+            status.textContent = 'Processing latest satellite imagery...';
             mapBtn.disabled = true;
-            mapBtn.textContent = 'Loading Map...';
-            status.textContent = 'Loading Sentinel-2 NDVI map...';
-            
+
             try {
-                // Clear existing layers
-                map.eachLayer(layer => {
-                    if (layer instanceof L.TileLayer) {
-                        map.removeLayer(layer);
-                    }
-                });
+                const paddocks = ee.FeatureCollection(PADDOCKS_ASSET);
                 
-                // ===== YOUR GEE CODE =====
-                const allPaddocks = ee.FeatureCollection(PADDOCKS_ASSET);
-                const targetNames = ['Back TP1', 'BP1', 'BP1 Dry', 'BP3', 'BP4', 'BP7', 'BP8', 'C1', 'C2', 'C3', 'C4', 'C5', 'Centre Left', 'Centre Right', 'Cottage', 'MP 15', 'MP 16', 'MP11', 'MP12', 'MP13', 'MP14', 'TP1', 'TP10', 'TP11', 'TP13', 'TP14', 'TP15', 'TP16', 'TP17', 'TP18', 'TP19', 'TP20', 'TP5', 'TP6', 'TP7','MP 17','TP3','12', 'TP8', 'TP9'];
-                const paddocks = allPaddocks.filter(ee.Filter.inList('name', targetNames));
-                
-                const now = ee.Date(new Date());
+                // Get most recent S2 image (last 45 days)
                 const s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
                     .filterBounds(paddocks.geometry())
-                    .filterDate(now.advance(-45, 'day'), now)
-                    .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', 50))
+                    .filterDate(ee.Date(Date.now()).advance(-45, 'day'), ee.Date(Date.now()))
+                    .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', 40))
                     .sort('system:time_start', false)
                     .first();
-                
-                const ndvi = s2.normalizedDifference(['B8', 'B4']).rename('ndvi');
-                
-                // Your visualization parameters
-                const extraHighContrastPalette = [
-                    '#FFFFFF', '#CE7E10', '#DE7740', '#DF9550', '#F1D155',
-                    '#E6E050', '#749063', '#A9D001', '#52A901', '#228B22',
-                    '#006400', '#004400'
-                ];
-                
-                const ndviParams = {
+
+                // Calculate NDVI
+                const ndvi = s2.normalizedDifference(['B8', 'B4']).clip(paddocks);
+
+                const viz = {
                     min: 0.25,
                     max: 0.85,
-                    palette: extraHighContrastPalette
+                    palette: ['#FFFFFF', '#CE7E10', '#DF9550', '#F1D155', '#228B22', '#004400']
                 };
-                
-                // Get map ID for NDVI layer
-                const ndviMapId = ndvi.clip(paddocks).getMapId(ndviParams);
-                
-                // Add NDVI layer to map
-                const ndviUrl = `https://earthengine.googleapis.com/map/${ndviMapId.mapid}/{z}/{x}/{y}?token=${ndviMapId.token}`;
-                
-                L.tileLayer(ndviUrl, {
-                    attribution: 'Google Earth Engine | Sentinel-2'
-                }).addTo(map);
-                
-                // Add strip line detection
-                const gradient = ndvi.gradient().abs().reduce(ee.Reducer.sum());
-                const edge = gradient.gt(0.07);
-                const stripLine = edge.clip(paddocks).updateMask(edge);
-                const stripMapId = stripLine.getMapId({palette: ['#FF00FF']});
-                
-                L.tileLayer(`https://earthengine.googleapis.com/map/${stripMapId.mapid}/{z}/{x}/{y}?token=${stripMapId.token}`, {
-                    attribution: 'Strip Detection'
-                }).addTo(map);
-                
-                // Add paddock borders
-                const outline = ee.Image().byte().paint({
-                    featureCollection: paddocks,
-                    color: 1,
-                    width: 2
+
+                // Get Map ID from GEE
+                const mapId = await new Promise((resolve, reject) => {
+                    ndvi.getMapId(viz, (res, err) => res ? resolve(res) : reject(err));
                 });
-                
-                const outlineMapId = outline.getMapId({palette: ['#00FFFF']});
-                
-                L.tileLayer(`https://earthengine.googleapis.com/map/${outlineMapId.mapid}/{z}/{x}/{y}?token=${outlineMapId.token}`, {
-                    attribution: 'Paddock Borders'
-                }).addTo(map);
-                
-                // Center map on paddocks
-                paddocks.evaluate(function(features) {
-                    if (features && features.features && features.features.length > 0) {
-                        const bounds = L.geoJSON(features).getBounds();
-                        if (bounds.isValid()) {
-                            map.fitBounds(bounds);
-                        }
-                    }
+
+                // Clear old layer if it exists
+                if (ndviLayer) map.removeLayer(ndviLayer);
+
+                // Add to Leaflet
+                const url = `https://earthengine.googleapis.com/map/${mapId.mapid}/{z}/{x}/{y}?token=${mapId.token}`;
+                ndviLayer = L.tileLayer(url, { attribution: 'Google Earth Engine | Sentinel-2' }).addTo(map);
+
+                // Add Paddock Outlines
+                const outline = ee.Image().byte().paint(paddocks, 1, 2);
+                const outlineId = await new Promise((resolve, reject) => {
+                    outline.getMapId({palette: ['#00FFFF']}, (res, err) => res ? resolve(res) : reject(err));
                 });
-                
-                mapBtn.textContent = 'Map Loaded';
-                status.textContent = 'NDVI map loaded successfully';
-                
-            } catch (error) {
-                console.error('GEE Map Error:', error);
-                mapBtn.textContent = 'Failed - Try Again';
+                L.tileLayer(`https://earthengine.googleapis.com/map/${outlineId.mapid}/{z}/{x}/{y}?token=${outlineId.token}`).addTo(map);
+
+                // Zoom to Paddocks
+                paddocks.getBounds((bounds) => {
+                    const c = bounds.coordinates[0];
+                    map.fitBounds([[c[0][1], c[0][0]], [c[2][1], c[2][0]]]);
+                });
+
+                status.textContent = 'NDVI Map Loaded Successfully.';
                 mapBtn.disabled = false;
-                status.textContent = 'Failed to load map: ' + error.message;
+            } catch (err) {
+                console.error(err);
+                status.textContent = 'Error: ' + err.message;
+                mapBtn.disabled = false;
             }
         }
-        
-        // ===== BIOMASS DATA FUNCTIONS =====
+
+        // 3. Biomass Table Logic (from Google Sheets)
         async function loadBiomassData() {
             const loading = document.getElementById('loading');
-            const error = document.getElementById('error');
-            
+            const tableBody = document.getElementById('tableBody');
             loading.style.display = 'block';
-            error.style.display = 'none';
-            
+            tableBody.innerHTML = '';
+
             try {
-                const cloudFilter = document.getElementById('cloudFilter').value;
-                const sheetName = `Biomass_Standard_${cloudFilter}pc`;
-                
-                const response = await fetch(`${SHEETS_API}?sheet=${sheetName}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error: ${response.status}`);
-                }
-                
+                const cloud = document.getElementById('cloudFilter').value;
+                const response = await fetch(`${SHEETS_API}?sheet=Biomass_Standard_${cloud}pc`);
                 const result = await response.json();
-                
-                // Handle response format
-                biomassData = result.data || result;
-                
-                updateTable();
-                
+                const data = result.data || result;
+
+                data.sort((a, b) => (b['Est. kg DM/ha'] || 0) - (a['Est. kg DM/ha'] || 0));
+
+                data.forEach(item => {
+                    const row = `<tr>
+                        <td>${item['Paddock Name'] || 'N/A'}</td>
+                        <td><strong>${Math.round(item['Est. kg DM/ha'] || 0).toLocaleString()}</strong></td>
+                        <td>${(item['Date of Reading'] || '').split('T')[0]}</td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                });
             } catch (err) {
-                error.textContent = 'Failed to load data: ' + err.message;
-                error.style.display = 'block';
+                tableBody.innerHTML = '<tr><td colspan="3">Error loading spreadsheet data.</td></tr>';
             } finally {
                 loading.style.display = 'none';
             }
-        }
-        
-        function updateTable() {
-            const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = '';
-            
-            // Sort by biomass (highest first)
-            biomassData.sort((a, b) => (b['Est. kg DM/ha'] || 0) - (a['Est. kg DM/ha'] || 0));
-            
-            biomassData.forEach(item => {
-                const name = item['Paddock Name'] || 'Unknown';
-                const biomass = Math.round(item['Est. kg DM/ha'] || 0);
-                const rawDate = item['Date of Reading'] || '--';
-                const date = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
-                
-                const row = `<tr>
-                    <td>${name}</td>
-                    <td>${biomass.toLocaleString()}</td>
-                    <td>${date}</td>
-                </tr>`;
-                
-                tableBody.innerHTML += row;
-            });
         }
     </script>
 </body>
