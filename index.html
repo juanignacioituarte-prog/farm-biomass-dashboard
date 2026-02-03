@@ -94,29 +94,43 @@
 
         // 1. Authenticate with Google
         async function initGEE() {
-            const status = document.getElementById('mapStatus');
-            const initBtn = document.getElementById('initBtn');
-            status.textContent = 'Opening Google Login Popup...';
+    const status = document.getElementById('mapStatus');
+    console.log("Initialize button clicked..."); // Check F12 console for this
 
-            try {
-                await new Promise((resolve, reject) => {
-                    ee.data.authenticateViaPopup(
-                        () => {
-                            ee.initialize(null, null, resolve, reject);
-                        },
-                        (err) => reject(err)
-                    );
-                });
+    // 1. Check if the library is even loaded
+    if (typeof ee === 'undefined') {
+        alert("Earth Engine library failed to load. Check your internet or script tags.");
+        return;
+    }
 
-                status.textContent = 'Authenticated successfully!';
-                initBtn.textContent = 'Logged In';
-                initBtn.disabled = true;
-                document.getElementById('mapBtn').disabled = false;
-            } catch (err) {
-                console.error(err);
-                status.textContent = 'Login failed. Check if popups are blocked or if your URL is authorized in Google Console.';
+    status.textContent = 'Attempting to open Google Login...';
+
+    try {
+        // Use the 'Popup' flow specifically
+        ee.data.authenticateViaPopup(
+            () => {
+                console.log("OAuth Successful, initializing...");
+                ee.initialize(null, null, 
+                    () => {
+                        status.textContent = 'Authenticated and Initialized!';
+                        document.getElementById('initBtn').textContent = 'Logged In';
+                        document.getElementById('mapBtn').disabled = false;
+                    }, 
+                    (err) => {
+                        status.textContent = 'Initialization error: ' + err;
+                    }
+                );
+            },
+            (err) => {
+                console.error("Popup Error:", err);
+                status.textContent = 'Popup failed. Error: ' + JSON.stringify(err);
+                alert("Popup blocked or Origin not authorized. Check the F12 console.");
             }
-        }
+        );
+    } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+    }
+}
 
         // 2. Load the NDVI Map from GEE
         async function loadGeeMap() {
@@ -212,3 +226,4 @@
     </script>
 </body>
 </html>
+
