@@ -3,111 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NDVI Project Explorer</title>
-    
+    <title>Farm Monitor Dashboard | Pro</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; }
+        :root { --accent: #27ae60; --warning-bg: #fff3cd; --warning-border: #ffeeba; --warning-text: #856404; --text-dark: #2c3e50; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100vh; display: flex; background: #f0f2f5; overflow: hidden; }
         
-        #map-info {
-            position: absolute;
-            bottom: 30px; /* Shifted up slightly to clear the scale bar */
-            left: 10px;
-            z-index: 1000;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 12px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            pointer-events: none;
-            border: 1px solid #ccc;
-        }
+        /* Map Area */
+        #map { flex-grow: 1; height: 100%; background: #000; z-index: 1; }
+        
+        /* Sidebar Area */
+        #sidebar { width: 380px; background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; z-index: 2000; box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid #eee; background: white; }
+        .search-box { width: 100%; padding: 12px; margin-top: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
 
-        .map-title {
-            position: absolute;
-            top: 10px;
-            left: 50px;
-            z-index: 1000;
-            background: white;
-            padding: 5px 15px;
-            border-radius: 5px;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
+        /* Paddock List */
+        #biomass-list { flex-grow: 1; overflow-y: auto; padding: 15px; background: #f8faf9; }
+        .paddock-card { background: white; border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 12px; border-left: 6px solid var(--accent); cursor: pointer; transition: transform 0.1s; }
+        .paddock-card:hover { transform: scale(1.01); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        
+        .reading-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; color: var(--text-dark); }
+        .reading-row b { color: #000; }
+
+        /* Growth Boxes */
+        .growth-container { margin-top: 10px; padding: 12px; background: #eef9f2; border-radius: 8px; text-align: center; border: 1px solid #c3e6cb; }
+        .growth-value { display: block; font-size: 18px; font-weight: bold; color: var(--accent); }
+        
+        .warning-box { margin-top: 10px; padding: 12px; background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px; color: var(--warning-text); font-size: 12px; line-height: 1.4; }
+
+        /* Map Controls */
+        #dimmer-control { position: absolute; bottom: 30px; left: 15px; z-index: 1000; background: white; padding: 12px; border-radius: 8px; border: 1px solid #ccc; width: 160px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
 
-<div class="map-title">NDVI Project Explorer</div>
-
-<div id="map-info">
-    Lat: -42.6794, Lon: 172.8791 | Zoom: 15
-</div>
-
 <div id="map"></div>
 
+<div id="dimmer-control">
+    <label style="font-size:11px; font-weight:bold; display:block; margin-bottom:5px;">MAP INTENSITY</label>
+    <input type="range" id="opacitySlider" min="0.1" max="1" step="0.1" value="0.6" style="width:100%">
+</div>
+
+<div id="sidebar">
+    <div class="sidebar-header">
+        <h3 style="margin:0; color:var(--text-dark)">Paddock Inventory</h3>
+        <input type="text" id="paddockSearch" class="search-box" placeholder="Search paddocks...">
+    </div>
+    <div id="biomass-list">
+        <div style="text-align:center; padding:50px; color:#999;">Updating data...</div>
+    </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-    // 1. Initialize Map at specified coordinates and zoom
-    const map = L.map('map').setView([-42.6794, 172.8791], 14);
-
-    // 2. Base Layers
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-    });
-
-    // Defaulting to Satellite view as it's usually better for NDVI comparison
-    const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-        attribution: '© Google'
-    }).addTo(map);
-
-    // 3. Earth Engine Layers (Note: URLs expire periodically)
-    const ndviLayer = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/8e38d6aa273129e41523f1865a8491f9-b285f5b7f76bc48d602f603492ca9976/tiles/{z}/{x}/{y}', {
-        attribution: 'Google Earth Engine',
-        opacity: 0.6
-    }).addTo(map);
-
-    const stripLineLayer = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/9fb0cfd478686a75bb9e68b03ae934fd-eff7461a1b6c89d323447acaa3ca2925/tiles/{z}/{x}/{y}', {
-        attribution: 'Google Earth Engine'
-    });
-
-    const bordersLayer = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/7c489e410abe28e9c2fa6af47c439f7e-479e87b6c894c95117fa6f6340ff35c0/tiles/{z}/{x}/{y}', {
-        attribution: 'Google Earth Engine'
-    }).addTo(map);
-
-    // 4. Controls
-    const baseMaps = { "Satellite": satellite, "Street Map": osm };
-    const overlayMaps = { 
-        "NDVI Map": ndviLayer, 
-        "Strip Lines": stripLineLayer, 
-        "Paddock Borders": bordersLayer 
-    };
+    // --- PASTE YOUR RE-DEPLOYED APPS SCRIPT URL HERE ---
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMj0BfEvQAhFG4sW3dQV-xNvP-L-2S2IRawjdH5j7o0tXBTVy_BTdmJapopz2wMLiZ/exec"; 
     
-    L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
-    
-    // Add a metric scale bar
-    L.control.scale({ imperial: false }).addTo(map);
+    let masterData = [];
+    let map, satellite, terrain, geeLayer1, geeLayer2;
 
-    // 5. COORDINATE & ZOOM TRACKER LOGIC
-    const infoBox = document.getElementById('map-info');
-
-    function updateInfo(e) {
-        const lat = e ? e.latlng.lat.toFixed(4) : map.getCenter().lat.toFixed(4);
-        const lng = e ? e.latlng.lng.toFixed(4) : map.getCenter().lng.toFixed(4);
-        const zoom = map.getZoom();
-        infoBox.innerHTML = `Lat: ${lat}, Lon: ${lng} | Zoom: ${zoom}`;
+    function formatDate(dateStr) {
+        if (!dateStr) return "--/--/----";
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return "--/--/----";
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     }
 
-    map.on('mousemove', updateInfo);
-    map.on('zoomend', () => updateInfo());
+    function initMap() {
+        satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { opacity: 0.6 });
+        terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { opacity: 0.6 });
+        
+        map = L.map('map', { center: [-42.6794, 172.8791], zoom: 14, layers: [satellite] });
 
+        // GEE Layers (Replace these URLs if they have expired)
+        geeLayer1 = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/8e38d6aa273129e41523f1865a8491f9-b285f5b7f76bc48d602f603492ca9976/tiles/{z}/{x}/{y}', { opacity: 0.6 }).addTo(map);
+        geeLayer2 = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/7c489e410abe28e9c2fa6af47c439f7e-479e87b6c894c95117fa6f6340ff35c0/tiles/{z}/{x}/{y}').addTo(map);
+        
+        L.control.layers({ "Satellite View": satellite, "Terrain View": terrain }, { "NDVI Overlay": geeLayer1, "Biomass Overlay": geeLayer2 }).addTo(map);
+
+        document.getElementById('opacitySlider').oninput = (e) => {
+            const val = e.target.value;
+            satellite.setOpacity(val);
+            terrain.setOpacity(val);
+            geeLayer1.setOpacity(val);
+        };
+    }
+
+    async function loadFarmData() {
+        const listContainer = document.getElementById('biomass-list');
+        try {
+            const [rawRes, coordRes] = await Promise.all([
+                fetch(`${SCRIPT_URL}?sheet=rawdata`),
+                fetch(`${SCRIPT_URL}?sheet=Paddock_Coordinates`)
+            ]);
+            
+            const rawJson = await rawRes.json();
+            const coordJson = await coordRes.json();
+
+            const groups = {};
+            rawJson.data.forEach(r => {
+                const name = String(r.paddock_name).trim();
+                const cover = parseFloat(r.cover);
+                if (name && !isNaN(cover)) {
+                    if (!groups[name]) groups[name] = [];
+                    groups[name].push({ date: new Date(r.date), cover: cover });
+                }
+            });
+
+            masterData = Object.keys(groups).map(name => {
+                const entries = groups[name].sort((a,b) => b.date - a.date);
+                const latest = entries[0];
+                const prev = entries[1] || null;
+                const c = coordJson.data.find(x => String(x["Paddock Name"]).trim() === name);
+                
+                let growth = null, days = null;
+                if (prev) {
+                    days = Math.ceil(Math.abs(latest.date - prev.date) / 86400000);
+                    if (days > 0 && days <= 12) {
+                        growth = ((latest.cover - prev.cover) / days).toFixed(1);
+                    }
+                }
+                return { name, latest, prev, growth, days, lat: c ? c.Latitude : null, lon: c ? c.Longitude : null };
+            });
+
+            masterData.sort((a,b) => b.latest.cover - a.latest.cover);
+            renderCards(masterData);
+
+        } catch (e) {
+            listContainer.innerHTML = `<div style="padding:20px; color:red;">Connection Error. Check Script URL.</div>`;
+        }
+    }
+
+    function renderCards(data) {
+        const list = document.getElementById('biomass-list');
+        list.innerHTML = "";
+        
+        data.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'paddock-card';
+            
+            let growthSection = "";
+            if (item.growth !== null) {
+                // Good data
+                growthSection = `<div class="growth-container">
+                                    <span class="growth-value">${item.growth} kg/day</span>
+                                    <small style="color:#155724">Rate over last ${item.days} days</small>
+                                 </div>`;
+            } else if (item.prev) {
+                // Clear 12-day Warning
+                growthSection = `<div class="warning-box">
+                                    <strong>⚠️ Growth Paused</strong><br>
+                                    Last reading was ${item.days} days ago. Rates only calculated for gaps under 12 days for accuracy.
+                                 </div>`;
+            } else {
+                growthSection = `<div class="warning-box" style="background:#e9ecef; border:none; color:#666;">New Paddock: Waiting for second reading.</div>`;
+            }
+
+            card.innerHTML = `
+                <h3 style="margin:0 0 10px 0; color:var(--text-dark)">${item.name}</h3>
+                <div class="reading-row"><span>Latest (${formatDate(item.latest.date)}):</span><b>${Math.round(item.latest.cover).toLocaleString()} kg</b></div>
+                ${item.prev ? `<div class="reading-row" style="color:#666"><span>Previous (${formatDate(item.prev.date)}):</span><b>${Math.round(item.prev.cover).toLocaleString()} kg</b></div>` : ''}
+                ${growthSection}
+            `;
+            card.onclick = () => { if(item.lat) map.flyTo([item.lat, item.lon], 17); };
+            list.appendChild(card);
+        });
+    }
+
+    document.getElementById('paddockSearch').oninput = (e) => {
+        const t = e.target.value.toLowerCase();
+        renderCards(masterData.filter(x => x.name.toLowerCase().includes(t)));
+    };
+
+    initMap();
+    loadFarmData();
 </script>
-
 </body>
 </html>
-
