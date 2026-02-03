@@ -3,1050 +3,459 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NZ Farm Biomass Dashboard | GitHub Pages</title>
+    <title>Farm Biomass Dashboard</title>
     
     <!-- Load Libraries -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- GitHub Pages Specific CSS -->
     <style>
-        :root {
-            --primary: #2ea44f;
-            --primary-dark: #2c974b;
-            --secondary: #0366d6;
-            --dark: #24292e;
-            --light: #f6f8fa;
-            --gray: #6a737d;
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-        }
-        
         body {
-            background-color: #fafbfc;
-            color: #24292e;
-            line-height: 1.5;
-        }
-        
-        /* GitHub Style Header */
-        .github-header {
-            background-color: #24292e;
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 1px 0 rgba(27,31,36,0.04);
-        }
-        
-        .logo-container {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        
-        .logo {
-            font-size: 1.8rem;
-            font-weight: 600;
-            color: white;
-            text-decoration: none;
-        }
-        
-        .logo-icon {
-            color: #2ea44f;
-        }
-        
-        .github-badge {
-            background: rgba(255,255,255,0.1);
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
         }
         
         .container {
-            max-width: 1400px;
-            margin: 2rem auto;
-            padding: 0 1rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .content {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 2rem;
+            gap: 20px;
         }
         
-        @media (max-width: 1024px) {
-            .container {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .github-card {
+        .card {
             background: white;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(27,31,36,0.04);
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #e1e4e8;
-        }
-        
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #24292e;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background-color: #2ea44f;
-            color: white;
-            border: 1px solid rgba(27,31,36,0.15);
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-        }
-        
-        .btn:hover {
-            background-color: #2c974b;
-            border-color: rgba(27,31,36,0.15);
-        }
-        
-        .btn-outline {
-            background-color: #fafbfc;
-            color: #24292e;
-            border: 1px solid #e1e4e8;
-        }
-        
-        .btn-outline:hover {
-            background-color: #f3f4f6;
-        }
-        
-        .btn-danger {
-            background-color: #d73a49;
-        }
-        
-        .btn-danger:hover {
-            background-color: #cb2431;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         
         #map {
-            height: 500px;
+            height: 400px;
             width: 100%;
-            border-radius: 6px;
-            border: 1px solid #e1e4e8;
-            background-color: #f6f8fa;
+            border-radius: 5px;
         }
         
         .controls {
+            margin-bottom: 15px;
             display: flex;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
+            gap: 10px;
         }
         
-        select {
-            padding: 0.5rem;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            background-color: white;
-            color: #24292e;
-            font-size: 0.875rem;
+        select, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         
-        select:focus {
-            outline: none;
-            border-color: #0366d6;
-            box-shadow: 0 0 0 3px rgba(3,102,214,0.3);
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
         }
         
-        .table-container {
-            overflow-x: auto;
-            margin-top: 1rem;
+        button:hover {
+            background: #2980b9;
         }
         
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.875rem;
+            margin-top: 15px;
+        }
+        
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
         }
         
         th {
-            text-align: left;
-            padding: 0.75rem 1rem;
-            background-color: #f6f8fa;
-            border-bottom: 2px solid #e1e4e8;
-            font-weight: 600;
-            color: #24292e;
+            background: #f8f9fa;
         }
         
-        td {
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #eaecef;
+        .status {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: bold;
         }
         
-        tr:hover {
-            background-color: #f6f8fa;
-        }
-        
-        .biomass-badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 2em;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        
-        .badge-low {
-            background-color: #ffdce0;
-            color: #86181d;
-        }
-        
-        .badge-medium {
-            background-color: #ffdac4;
-            color: #b55300;
-        }
-        
-        .badge-high {
-            background-color: #dcffe4;
-            color: #176f2c;
-        }
-        
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin-top: 1.5rem;
-        }
+        .high { background: #d4edda; color: #155724; }
+        .medium { background: #fff3cd; color: #856404; }
+        .low { background: #f8d7da; color: #721c24; }
         
         .loading {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 3rem;
-            color: #6a737d;
-        }
-        
-        .loading-spinner {
-            width: 2rem;
-            height: 2rem;
-            border: 3px solid #e1e4e8;
-            border-top-color: #0366d6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 1rem;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .error-alert {
-            background-color: #ffdce0;
-            border: 1px solid #f97583;
-            border-radius: 6px;
-            padding: 1rem;
-            margin: 1rem 0;
-            color: #86181d;
-            display: none;
-        }
-        
-        .success-alert {
-            background-color: #dcffe4;
-            border: 1px solid #34d058;
-            border-radius: 6px;
-            padding: 1rem;
-            margin: 1rem 0;
-            color: #176f2c;
-            display: none;
-        }
-        
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 1.5rem;
-            padding-top: 1rem;
-            border-top: 1px solid #eaecef;
-            font-size: 0.875rem;
-            color: #6a737d;
-        }
-        
-        .footer {
             text-align: center;
-            padding: 2rem;
-            margin-top: 2rem;
-            color: #6a737d;
-            font-size: 0.875rem;
-            border-top: 1px solid #eaecef;
+            padding: 20px;
+            color: #666;
         }
         
-        .paddock-details {
-            background-color: #f6f8fa;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 1rem;
-            margin-top: 1rem;
-            display: none;
-        }
-        
-        .details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 0.5rem;
-        }
-        
-        .detail-item {
-            padding: 0.5rem;
-            background: white;
-            border: 1px solid #eaecef;
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
             border-radius: 4px;
-        }
-        
-        .detail-label {
-            font-size: 0.75rem;
-            color: #6a737d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .detail-value {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #24292e;
-            margin-top: 0.25rem;
-        }
-        
-        .github-corner {
-            position: absolute;
-            top: 0;
-            right: 0;
-            z-index: 1000;
+            margin: 10px 0;
+            display: none;
         }
     </style>
 </head>
 <body>
-    <!-- GitHub Corner Banner -->
-    <a href="https://github.com/yourusername/farm-biomass-dashboard" class="github-corner" aria-label="View source on GitHub">
-        <svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true">
-            <path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path>
-            <path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path>
-            <path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path>
-        </svg>
-    </a>
-    
-    <!-- GitHub Style Header -->
-    <header class="github-header">
-        <div class="logo-container">
-            <i class="fas fa-tractor logo-icon"></i>
-            <h1 class="logo">NZ Farm Biomass Dashboard</h1>
-        </div>
-        <div class="github-badge">
-            <i class="fas fa-satellite"></i>
-            <span>Powered by GEE & GitHub Pages</span>
-        </div>
-    </header>
-    
-    <!-- Main Container -->
     <div class="container">
-        <!-- Left Column: Map -->
-        <div class="github-card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="fas fa-map-marked-alt"></i>
-                    Farm Map & Paddocks
-                </h2>
-                <div class="controls">
-                    <button class="btn" onclick="loadBiomassData()">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-                </div>
-            </div>
-            
-            <div class="controls">
-                <select id="cloudFilter" onchange="loadBiomassData()">
-                    <option value="40">Standard (≤40% cloud)</option>
-                    <option value="30">Strict (≤30% cloud)</option>
-                    <option value="50">Loose (≤50% cloud)</option>
-                </select>
-                
-                <button class="btn btn-outline" onclick="showSatelliteView()">
-                    <i class="fas fa-satellite"></i> Satellite
-                </button>
-                
-                <button class="btn btn-outline" onclick="exportData()">
-                    <i class="fas fa-download"></i> Export
-                </button>
-            </div>
-            
-            <div id="map"></div>
-            
-            <div id="paddockDetails" class="paddock-details">
-                <h3 style="margin-bottom: 0.5rem;">
-                    <i class="fas fa-info-circle"></i>
-                    Selected Paddock: <span id="selectedPaddockName">--</span>
-                </h3>
-                <div class="details-grid">
-                    <div class="detail-item">
-                        <div class="detail-label">Biomass</div>
-                        <div class="detail-value" id="selectedBiomass">-- kg DM/ha</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Reading Date</div>
-                        <div class="detail-value" id="selectedDate">--</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Cloud Filter</div>
-                        <div class="detail-value" id="selectedCloud">--%</div>
-                    </div>
-                </div>
-            </div>
+        <div class="header">
+            <h1>🚜 Farm Biomass Dashboard</h1>
+            <p>Real-time biomass monitoring from Google Sheets</p>
         </div>
         
-        <!-- Right Column: Data -->
-        <div class="github-card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="fas fa-chart-bar"></i>
-                    Biomass Data
-                </h2>
-                <span class="btn-outline" id="dataCount">0 paddocks</span>
-            </div>
-            
-            <div id="loading" class="loading">
-                <div class="loading-spinner"></div>
-                <p>Loading biomass data from Google Sheets...</p>
-            </div>
-            
-            <div id="errorAlert" class="error-alert">
-                <i class="fas fa-exclamation-circle"></i>
-                <span id="errorMessage">Error message will appear here</span>
-            </div>
-            
-            <div id="successAlert" class="success-alert">
-                <i class="fas fa-check-circle"></i>
-                <span id="successMessage">Data loaded successfully!</span>
-            </div>
-            
-            <div class="chart-container">
-                <canvas id="biomassChart"></canvas>
-            </div>
-            
-            <div class="table-container">
-                <table id="biomassTable">
-                    <thead>
-                        <tr>
-                            <th>Paddock</th>
-                            <th>Biomass</th>
-                            <th>Date</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <!-- Data will be populated here -->
-                    </tbody>
-                </table>
-            </div>
-            
-            <div class="status-bar">
-                <div>
-                    <i class="fas fa-clock"></i>
-                    Last updated: <span id="lastUpdate">--</span>
+        <div class="content">
+            <!-- Left: Map -->
+            <div class="card">
+                <h2>📍 Farm Map</h2>
+                <div class="controls">
+                    <select id="cloudFilter" onchange="loadData()">
+                        <option value="40">Standard (≤40% cloud)</option>
+                        <option value="30">Strict (≤30% cloud)</option>
+                        <option value="50">Loose (≤50% cloud)</option>
+                    </select>
+                    <button onclick="loadData()">🔄 Refresh Data</button>
                 </div>
-                <div>
-                    <i class="fas fa-redo"></i>
-                    Auto-refresh: <span id="nextRefresh">5:00</span>
+                <div id="map"></div>
+                <div id="paddockInfo" style="margin-top: 15px; display: none;">
+                    <h3>Selected: <span id="selectedName">--</span></h3>
+                    <p>Biomass: <strong id="selectedBiomass">--</strong> kg DM/ha</p>
+                    <p>Date: <span id="selectedDate">--</span></p>
+                </div>
+            </div>
+            
+            <!-- Right: Data -->
+            <div class="card">
+                <h2>📊 Biomass Data</h2>
+                <div class="loading" id="loading">Loading data...</div>
+                <div class="error" id="error">Error message</div>
+                
+                <div style="height: 300px;">
+                    <canvas id="chart"></canvas>
+                </div>
+                
+                <div style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>Paddock</th>
+                                <th>Biomass</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Data will go here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                    <small>Last updated: <span id="lastUpdate">--</span> | Next refresh: <span id="nextUpdate">--</span></small>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Footer -->
-    <footer class="footer">
-        <p>
-            <i class="fas fa-code-branch"></i>
-            Deployed on GitHub Pages | 
-            <i class="fab fa-google"></i>
-            Google Earth Engine Integration |
-            <i class="fas fa-cloud"></i>
-            Google Sheets API
-        </p>
-        <p style="margin-top: 0.5rem; font-size: 0.75rem;">
-            © 2024 NZ Farm Biomass Monitoring System | 
-            <a href="https://github.com/yourusername/farm-biomass-dashboard" style="color: #0366d6;">
-                View on GitHub
-            </a>
-        </p>
-    </footer>
 
-    <!-- JavaScript -->
     <script>
-        // ============================================
-        // CONFIGURATION - UPDATED WITH YOUR URL
-        // ============================================
+        // ========== CONFIGURATION ==========
         const CONFIG = {
-            // ✅ YOUR GOOGLE APPS SCRIPT WEB APP URL
-            SHEETS_API_URL: 'https://script.google.com/macros/s/AKfycbzZ9KgIFLPJThJEmjvERPzsAFbs7J0_rJt8N6ngAAkmLBDRDVGzyGZ8hcdvIiC0fRIr/exec',
+            // Your Google Apps Script URL
+            API_URL: 'https://script.google.com/macros/s/AKfycbzZ9KgIFLPJThJEmjvERPzsAFbs7J0_rJt8N6ngAAkmLBDRDVGzyGZ8hcdvIiC0fRIr/exec',
             
-            // Map settings
-            MAP_CENTER: [-40.9006, 174.8860], // NZ coordinates
+            // Map center (New Zealand)
+            MAP_CENTER: [-40.9006, 174.8860],
             MAP_ZOOM: 6,
             
-            // Refresh settings (5 minutes)
-            REFRESH_INTERVAL: 5 * 60 * 1000,
-            
             // Biomass thresholds
-            THRESHOLDS: {
-                LOW: 1000,
-                HIGH: 2000
-            }
+            LOW_THRESHOLD: 1000,
+            HIGH_THRESHOLD: 2000
         };
-
-        // ============================================
-        // GLOBAL VARIABLES
-        // ============================================
+        
+        // ========== VARIABLES ==========
         let map = null;
-        let biomassChart = null;
-        let biomassData = [];
-        let currentMarkers = [];
-        let autoRefreshTimer = null;
-
-        // ============================================
-        // INITIALIZATION
-        // ============================================
+        let chart = null;
+        let allData = [];
+        
+        // ========== INITIALIZE ==========
         document.addEventListener('DOMContentLoaded', function() {
-            initMap();
-            loadBiomassData();
-            startAutoRefresh();
-            
-            // Test the API connection
-            testApiConnection();
-        });
-
-        // ============================================
-        // MAP FUNCTIONS
-        // ============================================
-        function initMap() {
-            // Initialize Leaflet map
+            // Setup map
             map = L.map('map').setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
-            
-            // Add OpenStreetMap base layer
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 19
+                attribution: '© OpenStreetMap'
             }).addTo(map);
             
-            console.log('Map initialized');
-        }
-
-        function showSatelliteView() {
-            // Add satellite layer
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '© Esri, Maxar, Earthstar Geographics',
-                maxZoom: 19
-            }).addTo(map);
+            // Load data
+            loadData();
             
-            showSuccess('Satellite view enabled');
-        }
-
-        function addPaddockMarkers() {
-            // Clear existing markers
-            currentMarkers.forEach(marker => map.removeLayer(marker));
-            currentMarkers = [];
-            
-            if (biomassData.length === 0) return;
-            
-            // Add markers for each paddock
-            biomassData.forEach((item, index) => {
-                const biomass = item['Est. kg DM/ha'] || 0;
-                const paddock = item['Paddock Name'] || 'Unknown';
-                
-                // Generate simulated coordinates (in real app, use actual coordinates from GEE)
-                const lat = CONFIG.MAP_CENTER[0] + (Math.random() - 0.5) * 4;
-                const lng = CONFIG.MAP_CENTER[1] + (Math.random() - 0.5) * 8;
-                
-                // Determine color based on biomass
-                let color, status;
-                if (biomass >= CONFIG.THRESHOLDS.HIGH) {
-                    color = '#28a745'; // Green
-                    status = 'High';
-                } else if (biomass >= CONFIG.THRESHOLDS.LOW) {
-                    color = '#ffc107'; // Yellow
-                    status = 'Medium';
-                } else {
-                    color = '#dc3545'; // Red
-                    status = 'Low';
-                }
-                
-                // Create circle marker
-                const marker = L.circleMarker([lat, lng], {
-                    radius: 10,
-                    fillColor: color,
-                    color: '#fff',
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.8
-                });
-                
-                // Add popup
-                marker.bindPopup(`
-                    <div style="min-width: 200px;">
-                        <strong style="color: #24292e;">${paddock}</strong>
-                        <div style="margin-top: 8px;">
-                            <div><strong>Biomass:</strong> ${Math.round(biomass).toLocaleString()} kg DM/ha</div>
-                            <div><strong>Date:</strong> ${formatDate(item['Date of Reading'])}</div>
-                            <div><strong>Status:</strong> <span style="color: ${color}">${status}</span></div>
-                        </div>
-                    </div>
-                `);
-                
-                // Add click handler
-                marker.on('click', function() {
-                    showPaddockDetails(item);
-                });
-                
-                marker.addTo(map);
-                currentMarkers.push(marker);
-            });
-            
-            // Fit bounds to show all markers
-            if (currentMarkers.length > 0) {
-                const group = new L.FeatureGroup(currentMarkers);
-                map.fitBounds(group.getBounds().pad(0.1));
-            }
-        }
-
-        function showPaddockDetails(item) {
-            const biomass = item['Est. kg DM/ha'] || 0;
-            const paddock = item['Paddock Name'] || 'Unknown';
-            const rawDate = item['Date of Reading'] || '--';
-            const cloudFilter = document.getElementById('cloudFilter').value;
-            
-            // Clean date format
-            const date = formatDate(rawDate);
-            
-            // Update details panel
-            document.getElementById('selectedPaddockName').textContent = paddock;
-            document.getElementById('selectedBiomass').textContent = `${Math.round(biomass).toLocaleString()} kg DM/ha`;
-            document.getElementById('selectedDate').textContent = date;
-            document.getElementById('selectedCloud').textContent = `${cloudFilter}%`;
-            
-            // Show details panel
-            document.getElementById('paddockDetails').style.display = 'block';
-        }
-
-        // Helper function to format dates
-        function formatDate(dateString) {
-            if (!dateString || dateString === '--') return '--';
-            
-            try {
-                // Handle ISO format (2026-01-27T08:00:00.000Z)
-                if (dateString.includes('T')) {
-                    const date = new Date(dateString);
-                    return date.toISOString().split('T')[0]; // YYYY-MM-DD
-                }
-                // Handle already formatted dates
-                return dateString;
-            } catch (e) {
-                return dateString;
-            }
-        }
-
-        // ============================================
-        // DATA FUNCTIONS - FIXED FOR YOUR API RESPONSE
-        // ============================================
-        async function loadBiomassData() {
+            // Auto-refresh every 5 minutes
+            setInterval(loadData, 5 * 60 * 1000);
+        });
+        
+        // ========== LOAD DATA ==========
+        async function loadData() {
             showLoading(true);
-            hideAlerts();
-            
-            const cloudFilter = document.getElementById('cloudFilter').value;
-            const sheetName = `Biomass_Standard_${cloudFilter}pc`;
+            hideError();
             
             try {
-                // Fetch data from Google Apps Script Web App
-                const response = await fetch(
-                    `${CONFIG.SHEETS_API_URL}?sheet=${encodeURIComponent(sheetName)}&timestamp=${Date.now()}`,
-                    {
-                        mode: 'no-cors' // Important for Google Apps Script
-                    }
-                );
+                // Get selected sheet
+                const cloudFilter = document.getElementById('cloudFilter').value;
+                const sheetName = `Biomass_Standard_${cloudFilter}pc`;
                 
-                if (!response.ok && response.type !== 'opaque') {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // Fetch data
+                const response = await fetch(`${CONFIG.API_URL}?sheet=${sheetName}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error: ${response.status}`);
                 }
                 
-                // Try to parse response
-                let result;
-                try {
-                    const text = await response.text();
-                    result = JSON.parse(text);
-                } catch (parseError) {
-                    // If we can't parse, try direct fetch without CORS
-                    console.log('Trying alternative fetch method...');
-                    result = await fetchDataAlternative(sheetName);
-                }
+                // Parse response
+                const result = await response.json();
                 
-                // ✅ FIXED DATA PARSING LOGIC
-                // Handle different API response formats
-                if (result && result.success !== undefined && result.data) {
-                    // Format: {success: true, data: [...], count: 40, ...}
-                    biomassData = Array.isArray(result.data) ? result.data : [];
-                    console.log(`Loaded ${biomassData.length} paddocks from wrapped data`);
+                // Handle different response formats
+                if (result && result.data) {
+                    // Format: {success: true, data: [...]}
+                    allData = result.data;
                 } else if (Array.isArray(result)) {
                     // Format: [...]
-                    biomassData = result;
-                    console.log(`Loaded ${biomassData.length} paddocks from direct array`);
-                } else if (result && Array.isArray(result)) {
-                    // Another array format
-                    biomassData = result;
-                    console.log(`Loaded ${biomassData.length} paddocks from array`);
+                    allData = result;
                 } else {
-                    // Try to extract data from any structure
-                    biomassData = extractDataFromResponse(result);
-                    console.log(`Extracted ${biomassData.length} paddocks from response`);
+                    throw new Error('Unexpected data format');
                 }
                 
-                if (biomassData.length === 0) {
-                    // If still no data, create sample data for testing
-                    console.log('No data found, using sample data for testing');
-                    biomassData = createSampleData();
+                if (allData.length === 0) {
+                    throw new Error('No data found');
                 }
                 
-                // Update UI
+                // Update display
                 updateTable();
                 updateChart();
-                addPaddockMarkers();
-                updateStatusBar();
+                addMapMarkers();
+                updateStatus();
                 
-                showSuccess(`Loaded ${biomassData.length} paddocks`);
+                console.log(`✅ Loaded ${allData.length} paddocks`);
                 
             } catch (error) {
-                console.error('Error loading biomass data:', error);
-                
-                // Use sample data if API fails
-                console.log('API failed, using sample data');
-                biomassData = createSampleData();
-                updateTable();
-                updateChart();
-                addPaddockMarkers();
-                updateStatusBar();
-                
-                showSuccess(`Loaded ${biomassData.length} sample paddocks (API offline)`);
+                console.error('Error:', error);
+                showError(`Failed to load: ${error.message}`);
             } finally {
                 showLoading(false);
             }
         }
-
-        // Alternative fetch method for CORS issues
-        async function fetchDataAlternative(sheetName) {
-            // Use a proxy or different approach
-            try {
-                // Try with JSONP-like approach
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
-                    `${CONFIG.SHEETS_API_URL}?sheet=${sheetName}`
-                )}`;
-                
-                const response = await fetch(proxyUrl);
-                return await response.json();
-            } catch (error) {
-                console.error('Alternative fetch failed:', error);
-                return null;
-            }
-        }
-
-        // Extract data from any response structure
-        function extractDataFromResponse(response) {
-            if (!response) return [];
-            
-            // Try common property names
-            const possibleDataKeys = ['data', 'items', 'results', 'values', 'paddocks'];
-            
-            for (const key of possibleDataKeys) {
-                if (response[key] && Array.isArray(response[key])) {
-                    return response[key];
-                }
-            }
-            
-            // If response itself might be the data array
-            if (Array.isArray(response)) {
-                return response;
-            }
-            
-            // Last resort: check if it has object properties that look like data
-            if (typeof response === 'object') {
-                const values = Object.values(response);
-                if (values.length > 0 && Array.isArray(values[0])) {
-                    return values[0];
-                }
-            }
-            
-            return [];
-        }
-
-        // Create sample data for testing
-        function createSampleData() {
-            return [
-                {"Paddock Name": "C2", "Est. kg DM/ha": 3118.79, "Date of Reading": "2026-01-27"},
-                {"Paddock Name": "MP14", "Est. kg DM/ha": 3030.88, "Date of Reading": "2026-01-27"},
-                {"Paddock Name": "TP3", "Est. kg DM/ha": 2992.16, "Date of Reading": "2026-01-27"},
-                {"Paddock Name": "TP17", "Est. kg DM/ha": 2981.80, "Date of Reading": "2026-01-27"},
-                {"Paddock Name": "TP5", "Est. kg DM/ha": 2963.70, "Date of Reading": "2026-01-27"}
-            ];
-        }
-
+        
+        // ========== UPDATE TABLE ==========
         function updateTable() {
             const tableBody = document.getElementById('tableBody');
             tableBody.innerHTML = '';
             
             // Sort by biomass (highest first)
-            biomassData.sort((a, b) => (b['Est. kg DM/ha'] || 0) - (a['Est. kg DM/ha'] || 0));
+            allData.sort((a, b) => (b['Est. kg DM/ha'] || 0) - (a['Est. kg DM/ha'] || 0));
             
-            biomassData.forEach(item => {
-                const biomass = item['Est. kg DM/ha'] || 0;
-                const paddock = item['Paddock Name'] || 'Unknown';
+            allData.forEach(item => {
+                const name = item['Paddock Name'] || 'Unknown';
+                const biomass = Math.round(item['Est. kg DM/ha'] || 0);
                 const rawDate = item['Date of Reading'] || '--';
-                const date = formatDate(rawDate);
+                
+                // Format date
+                let date = rawDate;
+                if (rawDate.includes('T')) {
+                    date = rawDate.split('T')[0];
+                }
                 
                 // Determine status
                 let statusClass, statusText;
-                if (biomass >= CONFIG.THRESHOLDS.HIGH) {
-                    statusClass = 'badge-high';
+                if (biomass >= CONFIG.HIGH_THRESHOLD) {
+                    statusClass = 'high';
                     statusText = 'High';
-                } else if (biomass >= CONFIG.THRESHOLDS.LOW) {
-                    statusClass = 'badge-medium';
+                } else if (biomass >= CONFIG.LOW_THRESHOLD) {
+                    statusClass = 'medium';
                     statusText = 'Medium';
                 } else {
-                    statusClass = 'badge-low';
+                    statusClass = 'low';
                     statusText = 'Low';
                 }
                 
-                // Create table row
+                // Create row
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td><strong>${paddock}</strong></td>
-                    <td>${Math.round(biomass).toLocaleString()}</td>
+                    <td><strong>${name}</strong></td>
+                    <td>${biomass.toLocaleString()}</td>
                     <td>${date}</td>
-                    <td><span class="biomass-badge ${statusClass}">${statusText}</span></td>
+                    <td><span class="status ${statusClass}">${statusText}</span></td>
                 `;
                 
-                // Add click handler
-                row.addEventListener('click', () => {
-                    showPaddockDetails(item);
-                    
-                    // Highlight the row
-                    document.querySelectorAll('#tableBody tr').forEach(r => {
-                        r.style.backgroundColor = '';
-                    });
-                    row.style.backgroundColor = '#f6f8fa';
-                });
+                // Click to show details
+                row.addEventListener('click', () => showPaddockDetails(item));
+                row.style.cursor = 'pointer';
                 
                 tableBody.appendChild(row);
             });
-            
-            // Update count
-            document.getElementById('dataCount').textContent = `${biomassData.length} paddocks`;
         }
-
+        
+        // ========== UPDATE CHART ==========
         function updateChart() {
-            const ctx = document.getElementById('biomassChart').getContext('2d');
+            const ctx = document.getElementById('chart').getContext('2d');
             
-            // Destroy existing chart
-            if (biomassChart) {
-                biomassChart.destroy();
+            // Destroy old chart
+            if (chart) {
+                chart.destroy();
             }
             
-            // Prepare data (show top 15 paddocks)
-            const topPaddocks = [...biomassData]
+            // Get top 10 paddocks
+            const topPaddocks = [...allData]
                 .sort((a, b) => (b['Est. kg DM/ha'] || 0) - (a['Est. kg DM/ha'] || 0))
-                .slice(0, 15);
+                .slice(0, 10);
             
-            const labels = topPaddocks.map(item => item['Paddock Name']);
-            const data = topPaddocks.map(item => item['Est. kg DM/ha'] || 0);
-            const colors = data.map(value => {
-                if (value >= CONFIG.THRESHOLDS.HIGH) return '#28a745';
-                if (value >= CONFIG.THRESHOLDS.LOW) return '#ffc107';
-                return '#dc3545';
-            });
+            const labels = topPaddocks.map(p => p['Paddock Name']);
+            const data = topPaddocks.map(p => Math.round(p['Est. kg DM/ha'] || 0));
             
-            // Create new chart
-            biomassChart = new Chart(ctx, {
+            // Create chart
+            chart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Biomass (kg DM/ha)',
                         data: data,
-                        backgroundColor: colors,
-                        borderColor: colors.map(c => Chart.helpers.color(c).darken(0.2).rgbString()),
+                        backgroundColor: '#3498db',
+                        borderColor: '#2980b9',
                         borderWidth: 1
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `Biomass: ${Math.round(context.parsed.y).toLocaleString()} kg DM/ha`;
-                                }
-                            }
-                        }
-                    },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'kg DM/ha'
-                            },
                             ticks: {
                                 callback: function(value) {
                                     return value.toLocaleString();
                                 }
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                maxRotation: 45,
-                                minRotation: 0
                             }
                         }
                     }
                 }
             });
         }
-
-        function exportData() {
-            if (biomassData.length === 0) {
-                showError('No data to export');
-                return;
-            }
+        
+        // ========== MAP MARKERS ==========
+        function addMapMarkers() {
+            // Clear existing markers
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
+                    map.removeLayer(layer);
+                }
+            });
             
-            const headers = ['Paddock Name', 'Est. kg DM/ha', 'Date of Reading'];
-            const csvContent = [
-                headers.join(','),
-                ...biomassData.map(row => 
-                    headers.map(header => 
-                        `"${row[header] || ''}"`
-                    ).join(',')
-                )
-            ].join('\n');
-            
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            
-            link.setAttribute('href', url);
-            link.setAttribute('download', `biomass_export_${new Date().toISOString().slice(0,10)}.csv`);
-            link.style.visibility = 'hidden';
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            showSuccess('Data exported successfully');
+            // Add markers
+            allData.forEach(item => {
+                const biomass = item['Est. kg DM/ha'] || 0;
+                const name = item['Paddock Name'] || 'Unknown';
+                
+                // Random position for demo (in real app, use actual coordinates)
+                const lat = CONFIG.MAP_CENTER[0] + (Math.random() - 0.5) * 3;
+                const lng = CONFIG.MAP_CENTER[1] + (Math.random() - 0.5) * 6;
+                
+                // Marker color based on biomass
+                let color;
+                if (biomass >= CONFIG.HIGH_THRESHOLD) color = 'green';
+                else if (biomass >= CONFIG.LOW_THRESHOLD) color = 'orange';
+                else color = 'red';
+                
+                // Add marker
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    fillOpacity: 0.8
+                }).addTo(map);
+                
+                // Popup
+                marker.bindPopup(`
+                    <strong>${name}</strong><br>
+                    Biomass: ${Math.round(biomass).toLocaleString()} kg DM/ha<br>
+                    Date: ${item['Date of Reading'] ? item['Date of Reading'].split('T')[0] : '--'}
+                `);
+                
+                // Click handler
+                marker.on('click', () => showPaddockDetails(item));
+            });
         }
-
-        // ============================================
-        // UTILITY FUNCTIONS
-        // ============================================
+        
+        // ========== SHOW PADDOCK DETAILS ==========
+        function showPaddockDetails(item) {
+            const name = item['Paddock Name'] || 'Unknown';
+            const biomass = Math.round(item['Est. kg DM/ha'] || 0);
+            const rawDate = item['Date of Reading'] || '--';
+            const date = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+            
+            document.getElementById('selectedName').textContent = name;
+            document.getElementById('selectedBiomass').textContent = biomass.toLocaleString();
+            document.getElementById('selectedDate').textContent = date;
+            document.getElementById('paddockInfo').style.display = 'block';
+        }
+        
+        // ========== HELPER FUNCTIONS ==========
         function showLoading(show) {
-            document.getElementById('loading').style.display = show ? 'flex' : 'none';
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
         }
-
+        
         function showError(message) {
-            document.getElementById('errorMessage').textContent = message;
-            document.getElementById('errorAlert').style.display = 'block';
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').style.display = 'block';
         }
-
-        function showSuccess(message) {
-            document.getElementById('successMessage').textContent = message;
-            document.getElementById('successAlert').style.display = 'block';
-            
-            // Auto-hide success message after 3 seconds
-            setTimeout(() => {
-                document.getElementById('successAlert').style.display = 'none';
-            }, 3000);
+        
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
         }
-
-        function hideAlerts() {
-            document.getElementById('errorAlert').style.display = 'none';
-            document.getElementById('successAlert').style.display = 'none';
-        }
-
-        function updateStatusBar() {
+        
+        function updateStatus() {
             const now = new Date();
             document.getElementById('lastUpdate').textContent = 
-                now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
             
-            const nextUpdate = new Date(now.getTime() + CONFIG.REFRESH_INTERVAL);
-            document.getElementById('nextRefresh').textContent = 
-                nextUpdate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const next = new Date(now.getTime() + 5 * 60 * 1000);
+            document.getElementById('nextUpdate').textContent = 
+                next.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         }
-
-        function startAutoRefresh() {
-            // Clear existing timer
-            if (autoRefreshTimer) {
-                clearInterval(autoRefreshTimer);
-            }
+        
+        // ========== EXPORT DATA ==========
+        function exportData() {
+            if (allData.length === 0) return;
             
-            // Set new timer
-            autoRefreshTimer = setInterval(() => {
-                loadBiomassData();
-            }, CONFIG.REFRESH_INTERVAL);
-        }
-
-        async function testApiConnection() {
-            try {
-                const testUrl = `${CONFIG.SHEETS_API_URL}?test=true&timestamp=${Date.now()}`;
-                const response = await fetch(testUrl, {mode: 'no-cors'});
-                console.log('API connection test: Response type', response.type);
-                return true;
-            } catch (error) {
-                console.warn('API connection test: Error', error);
-                return false;
-            }
-        }
-
-        // ============================================
-        // MANUAL DATA LOADING FOR DEBUGGING
-        // ============================================
-        function loadSampleDataManually() {
-            console.log('Loading sample data manually...');
-            biomassData = createSampleData();
-            updateTable();
-            updateChart();
-            addPaddockMarkers();
-            updateStatusBar();
-            showSuccess('Loaded sample data for testing');
+            const headers = ['Paddock Name', 'Est. kg DM/ha', 'Date of Reading'];
+            const csv = [
+                headers.join(','),
+                ...allData.map(row => headers.map(h => `"${row[h] || ''}"`).join(','))
+            ].join('\n');
+            
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `biomass_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
         }
     </script>
 </body>
