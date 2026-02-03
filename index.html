@@ -28,11 +28,18 @@
         /* Growth Boxes */
         .growth-container { margin-top: 10px; padding: 12px; background: #eef9f2; border-radius: 8px; text-align: center; border: 1px solid #c3e6cb; }
         .growth-value { display: block; font-size: 18px; font-weight: bold; color: var(--accent); }
-        
         .warning-box { margin-top: 10px; padding: 12px; background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px; color: var(--warning-text); font-size: 12px; line-height: 1.4; }
 
         /* Map Controls */
         #dimmer-control { position: absolute; bottom: 30px; left: 15px; z-index: 1000; background: white; padding: 12px; border-radius: 8px; border: 1px solid #ccc; width: 160px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+
+        /* --- PHONE FIX --- */
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            #map { height: 45vh; width: 100%; }
+            #sidebar { width: 100%; height: 55vh; border-left: none; border-top: 1px solid #ddd; }
+            #dimmer-control { bottom: unset; top: 10px; left: 10px; width: 100px; padding: 5px; font-size: 9px; }
+        }
     </style>
 </head>
 <body>
@@ -56,7 +63,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // --- PASTE YOUR RE-DEPLOYED APPS SCRIPT URL HERE ---
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMj0BfEvQAhFG4sW3dQV-xNvP-L-2S2IRawjdH5j7o0tXBTVy_BTdmJapopz2wMLiZ/exec"; 
     
     let masterData = [];
@@ -75,7 +81,6 @@
         
         map = L.map('map', { center: [-42.6794, 172.8791], zoom: 15, layers: [satellite] });
 
-        // GEE Layers (Replace these URLs if they have expired)
         geeLayer1 = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/8e38d6aa273129e41523f1865a8491f9-b285f5b7f76bc48d602f603492ca9976/tiles/{z}/{x}/{y}', { opacity: 0.6 }).addTo(map);
         geeLayer2 = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/7c489e410abe28e9c2fa6af47c439f7e-479e87b6c894c95117fa6f6340ff35c0/tiles/{z}/{x}/{y}').addTo(map);
         
@@ -90,55 +95,56 @@
     }
 
     async function loadFarmData() {
-        const listContainer = document.getElementById('biomass-list');
-        try {
-            const [rawRes, coordRes] = await Promise.all([
-                fetch(`${SCRIPT_URL}?sheet=rawdata`),
-                fetch(`${SCRIPT_URL}?sheet=Paddock_Coordinates`)
-            ]);
-            
-            const rawJson = await rawRes.json();
-            const coordJson = await coordRes.json();
+        const listContainer = document.getElementById('biomass-list');
+        try {
+            const [rawRes, coordRes] = await Promise.all([
+                fetch(`${SCRIPT_URL}?sheet=rawdata`),
+                fetch(`${SCRIPT_URL}?sheet=Paddock_Coordinates`)
+            ]);
+            
+            const rawJson = await rawRes.json();
+            const coordJson = await coordRes.json();
 
-            const groups = {};
-            rawJson.data.forEach(r => {
-                // Rename "12" to "TP12" during the grouping phase
-                let name = String(r.paddock_name).trim();
-                if (name === "12") name = "TP12"; 
+            const groups = {};
+            rawJson.data.forEach(r => {
+                let name = String(r.paddock_name).trim();
+                // RENAME FIX
+                if (name === "12") name = "TP12";
 
-                const cover = parseFloat(r.cover);
-                if (name && !isNaN(cover)) {
-                    if (!groups[name]) groups[name] = [];
-                    groups[name].push({ date: new Date(r.date), cover: cover });
-                }
-            });
+                const cover = parseFloat(r.cover);
+                if (name && !isNaN(cover)) {
+                    if (!groups[name]) groups[name] = [];
+                    groups[name].push({ date: new Date(r.date), cover: cover });
+                }
+            });
 
-            masterData = Object.keys(groups).map(name => {
-                const entries = groups[name].sort((a,b) => b.date - a.date);
-                const latest = entries[0];
-                const prev = entries[1] || null;
+            masterData = Object.keys(groups).map(name => {
+                const entries = groups[name].sort((a,b) => b.date - a.date);
+                const latest = entries[0];
+                const prev = entries[1] || null;
 
-                // Ensure coordinate lookup also maps to the renamed "TP12"
-                const lookupName = (name === "TP12") ? "12" : name;
-                const c = coordJson.data.find(x => String(x["Paddock Name"]).trim() === lookupName || String(x["Paddock Name"]).trim() === name);
-                
-                let growth = null, days = null;
-                if (prev) {
-                    days = Math.ceil(Math.abs(latest.date - prev.date) / 86400000);
-                    if (days > 0 && days <= 12) {
-                        growth = ((latest.cover - prev.cover) / days).toFixed(1);
-                    }
-                }
-                return { name, latest, prev, growth, days, lat: c ? c.Latitude : null, lon: c ? c.Longitude : null };
-            });
+                // COORDINATE MATCH FIX FOR TP12
+                const searchName = (name === "TP12") ? "12" : name;
+                const c = coordJson.data.find(x => String(x["Paddock Name"]).trim() === searchName || String(x["Paddock Name"]).trim() === name);
+                
+                let growth = null, days = null;
+                if (prev) {
+                    days = Math.ceil(Math.abs(latest.date - prev.date) / 86400000);
+                    if (days > 0 && days <= 12) {
+                        growth = ((latest.cover - prev.cover) / days).toFixed(1);
+                    }
+                }
+                return { name, latest, prev, growth, days, lat: c ? c.Latitude : null, lon: c ? c.Longitude : null };
+            });
 
-            masterData.sort((a,b) => b.latest.cover - a.latest.cover);
-            renderCards(masterData);
+            masterData.sort((a,b) => b.latest.cover - a.latest.cover);
+            renderCards(masterData);
 
-        } catch (e) {
-            listContainer.innerHTML = `<div style="padding:20px; color:red;">Connection Error. Check Script URL.</div>`;
-        }
-    }
+        } catch (e) {
+            listContainer.innerHTML = `<div style="padding:20px; color:red;">Connection Error.</div>`;
+        }
+    }
+
     function renderCards(data) {
         const list = document.getElementById('biomass-list');
         list.innerHTML = "";
@@ -149,25 +155,19 @@
             
             let growthSection = "";
             if (item.growth !== null) {
-                // Good data
                 growthSection = `<div class="growth-container">
                                     <span class="growth-value">${item.growth} kg/day</span>
-                                    <small style="color:#155724">Rate over last ${item.days} days</small>
+                                    <small style="color:#155724">Rate over ${item.days} days</small>
                                  </div>`;
             } else if (item.prev) {
-                // Clear 12-day Warning
-                growthSection = `<div class="warning-box">
-                                    <strong>⚠️ Growth Paused</strong><br>
-                                    Last reading was ${item.days} days ago. Rates only calculated for gaps under 12 days for accuracy.
-                                 </div>`;
+                growthSection = `<div class="warning-box">Growth calculation paused (>12 days).</div>`;
             } else {
-                growthSection = `<div class="warning-box" style="background:#e9ecef; border:none; color:#666;">New Paddock: Waiting for second reading.</div>`;
+                growthSection = `<div class="warning-box" style="background:#e9ecef; border:none; color:#666;">Waiting for second reading.</div>`;
             }
 
             card.innerHTML = `
                 <h3 style="margin:0 0 10px 0; color:var(--text-dark)">${item.name}</h3>
-                <div class="reading-row"><span>Latest (${formatDate(item.latest.date)}):</span><b>${Math.round(item.latest.cover).toLocaleString()} kg</b></div>
-                ${item.prev ? `<div class="reading-row" style="color:#666"><span>Previous (${formatDate(item.prev.date)}):</span><b>${Math.round(item.prev.cover).toLocaleString()} kg</b></div>` : ''}
+                <div class="reading-row"><span>Latest:</span><b>${Math.round(item.latest.cover).toLocaleString()} kg</b></div>
                 ${growthSection}
             `;
             card.onclick = () => { if(item.lat) map.flyTo([item.lat, item.lon], 17); };
@@ -185,7 +185,3 @@
 </script>
 </body>
 </html>
-
-
-
-
