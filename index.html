@@ -73,7 +73,7 @@
         satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { opacity: 0.6 });
         terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { opacity: 0.6 });
         
-        map = L.map('map', { center: [-42.6794, 172.8791], zoom: 14, layers: [satellite] });
+        map = L.map('map', { center: [-42.6794, 172.8791], zoom: 15, layers: [satellite] });
 
         // GEE Layers (Replace these URLs if they have expired)
         geeLayer1 = L.tileLayer('https://earthengine.googleapis.com/v1/projects/ndvi-project-484422/maps/8e38d6aa273129e41523f1865a8491f9-b285f5b7f76bc48d602f603492ca9976/tiles/{z}/{x}/{y}', { opacity: 0.6 }).addTo(map);
@@ -180,3 +180,4 @@
 </script>
 </body>
 </html>
+
