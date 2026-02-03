@@ -70,8 +70,8 @@
     }
 
     function initMap() {
-        satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { opacity: 0.6 });
-        terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { opacity: 0.6 });
+        satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { opacity: 0.4 });
+        terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { opacity: 0.4 });
         
         map = L.map('map', { center: [-42.6794, 172.8791], zoom: 15, layers: [satellite] });
 
@@ -180,4 +180,5 @@
 </script>
 </body>
 </html>
+
 
