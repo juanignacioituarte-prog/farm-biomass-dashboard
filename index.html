@@ -6,48 +6,35 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        :root { --accent: #2ecc71; --bg: #f4f7f6; --text: #2c3e50; --prev: #7f8c8d; --growth: #27ae60; }
-        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100vh; display: flex; background: var(--bg); color: var(--text); overflow: hidden; }
+        :root { --accent: #2ecc71; --bg: #f4f7f6; --text: #2c3e50; --prev: #7f8c8d; --growth: #27ae60; --out: #e74c3c; --warning: #f39c12; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; background: var(--bg); color: var(--text); overflow: hidden; }
         
         #map { flex-grow: 1; height: 100%; background: #222; }
-        
         #sidebar { width: 380px; background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; box-shadow: -2px 0 5px rgba(0,0,0,0.1); z-index: 1000; }
         
         .header { padding: 20px; background: #fff; border-bottom: 1px solid #eee; }
-        
-        .avg-box { background: var(--accent); color: white; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(46, 204, 113, 0.2); }
+        .avg-box { background: var(--accent); color: white; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px; }
         .avg-row { display: flex; justify-content: space-around; align-items: center; }
-        .avg-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.3); }
-        .avg-item small { display: block; font-size: 10px; opacity: 0.9; letter-spacing: 0.5px; margin-bottom: 4px; }
         
         #list { flex-grow: 1; overflow-y: auto; padding: 10px; scroll-behavior: smooth; }
         
-        .card { background: white; border: 1px solid #eee; padding: 14px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border-left: 5px solid #ccc; transition: all 0.2s ease; position: relative; }
-        .card:hover { border-left-color: var(--accent); background: #fafafa; transform: translateX(-2px); }
-        .card.active { border-left-color: var(--accent); border-right: 1px solid var(--accent); border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); background: #f0fff4; }
+        .card { background: white; border: 1px solid #eee; padding: 14px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border-left: 5px solid #ccc; position: relative; transition: 0.2s; }
+        .card:hover { background: #fafafa; }
+        .card.active { border-left-color: var(--accent); background: #f0fff4; border-right: 1px solid var(--accent); }
+        .card.is-out { opacity: 0.6; border-left-color: #95a5a6; background: #fdfdfd; }
         
-        .title-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-right: 60px; }
-        .card b { font-size: 16px; margin: 0; }
-        .area-tag { font-size: 11px; color: #7f8c8d; background: #eee; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
-
-        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .data-item { display: flex; flex-direction: column; }
-        .label { font-size: 10px; text-transform: uppercase; color: #95a5a6; font-weight: bold; letter-spacing: 0.5px; }
         .val { font-size: 17px; font-weight: bold; color: var(--accent); }
         .val.prev { color: var(--prev); font-size: 14px; }
-        .date { font-size: 11px; color: #95a5a6; }
+        .unit { font-size: 10px; color: #95a5a6; font-weight: normal; margin-left: 2px; }
+        .label { font-size: 10px; text-transform: uppercase; color: #95a5a6; font-weight: bold; display: block; }
+        .paddock-label { background: white; border: 1px solid #ccc; font-weight: bold; padding: 2px 5px; border-radius: 3px; pointer-events: none; }
         
-        .growth-badge { position: absolute; top: 14px; right: 14px; text-align: right; }
-        .growth-val { color: var(--growth); font-weight: bold; font-size: 14px; }
-        .growth-unit { font-size: 10px; color: #95a5a6; display: block; }
-
-        .paddock-label { background: rgba(255,255,255,0.9); border: 1px solid #ccc; font-weight: bold; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .badge { color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; vertical-align: middle; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
-
 <div id="sidebar">
     <div class="header">
         <div class="avg-box">
@@ -57,7 +44,6 @@
                     <div id="total-avg" style="font-size: 22px; font-weight: bold;">0</div>
                     <small>kgDM/ha</small>
                 </div>
-                <div class="avg-divider"></div>
                 <div class="avg-item">
                     <small>GROWTH</small>
                     <div id="avg-growth" style="font-size: 22px; font-weight: bold;">0</div>
@@ -65,68 +51,78 @@
                 </div>
             </div>
         </div>
-        <input type="text" id="search" placeholder="Search paddocks..." style="width:100%; padding:12px; border:1px solid #ddd; border-radius:6px; box-sizing:border-box; outline: none;">
+        <input type="text" id="search" placeholder="Search paddocks..." style="width:100%; padding:12px; border-radius:6px; border:1px solid #ddd; outline:none;">
     </div>
-    <div id="list"></div>
+    <div id="list">Loading data...</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     const GEOJSON_URL = "https://storage.googleapis.com/ndvi-exports/paddocks.geojson";
-    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBBRftvApfrkHKVQh9FV1qsYVy3Y2whaHKfyAWJ5Ymbc1cTcw7IzB4epF8h_-rN1dxD-N7bdaJyp1V/pub?gid=0&single=true&output=csv";
+    const DATA_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBBRftvApfrkHKVQh9FV1qsYVy3Y2whaHKfyAWJ5Ymbc1cTcw7IzB4epF8h_-rN1dxD-N7bdaJyp1V/pub?gid=0&single=true&output=csv";
+    const EXCLUSIONS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBBRftvApfrkHKVQh9FV1qsYVy3Y2whaHKfyAWJ5Ymbc1cTcw7IzB4epF8h_-rN1dxD-N7bdaJyp1V/pub?gid=494849216&single=true&output=csv";
 
     let map, ndviLayer, geoLayer;
     let paddockData = [];
     let paddockMap = {}; 
     let areaLookup = {}; 
+    let excludedPaddocks = new Map(); 
 
-    function formatDOYDate(dateStr) {
-        try {
+    function parseStrangeDate(dateStr) {
+        if (!dateStr) return new Date();
+        if (!isNaN(dateStr)) return new Date((dateStr - 25569) * 86400 * 1000);
+        if (dateStr.includes('-')) {
             const parts = dateStr.split('-');
-            const year = parseInt(parts[0]);
-            const doy = parseInt(parts[2]);
-            const date = new Date(year, 0);
-            date.setDate(doy);
-            return date.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric', year: 'numeric' });
-        } catch(e) { return dateStr; }
+            if (parts.length === 3 && parseInt(parts[2]) > 31) {
+                const date = new Date(parseInt(parts[0]), 0);
+                date.setDate(parseInt(parts[2]));
+                return date;
+            }
+        }
+        return new Date(dateStr);
     }
 
-    function init() {
+    async function loadExclusions() {
+        try {
+            const res = await fetch(EXCLUSIONS_CSV_URL + "&t=" + Date.now());
+            const text = await res.text();
+            const lines = text.split('\n').filter(l => l.trim() !== '');
+            lines.slice(1).forEach(line => {
+                const cols = line.split(',').map(c => c.trim().toLowerCase());
+                if(cols[0]) excludedPaddocks.set(cols[0], cols[1] || 'out');
+            });
+        } catch (e) { console.error("Exclusions error", e); }
+    }
+
+    async function init() {
         map = L.map('map').setView([-42.679, 172.879], 14);
         L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}').addTo(map);
+        await loadExclusions();
         loadGeoJSON();
     }
 
     async function loadGeoJSON() {
         try {
-            const response = await fetch(GEOJSON_URL + "?t=" + new Date().getTime(), { mode: 'cors' });
+            const response = await fetch(GEOJSON_URL + "?t=" + Date.now());
             const data = await response.json();
-            
             data.features.forEach(f => {
-                if (f.properties.name) {
-                    areaLookup[f.properties.name] = f.properties.calcArea;
-                }
+                if (f.properties.name) areaLookup[f.properties.name] = f.properties.calcArea || 0;
             });
-
             geoLayer = L.geoJSON(data, {
-                style: { color: 'white', weight: 1.5, fillOpacity: 0.1, fillColor: 'transparent' },
+                style: { color: 'white', weight: 1.5, fillOpacity: 0.1 },
                 onEachFeature: (feature, layer) => {
                     const pName = feature.properties.name;
-                    if (pName) {
-                        paddockMap[pName] = layer;
-                        layer.bindTooltip(pName, { permanent: false, className: 'paddock-label' });
-                        
-                        // Interaction: Map Click -> Sidebar Card
-                        layer.on('click', (e) => {
-                            L.DomEvent.stopPropagation(e);
-                            const cardId = `card-${pName.replace(/\s+/g, '-')}`;
-                            const card = document.getElementById(cardId);
-                            if(card) {
-                                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                card.click(); // Trigger visual state
-                            }
-                        });
-                    }
+                    paddockMap[pName] = layer;
+                    layer.bindTooltip(pName, { className: 'paddock-label' });
+                    layer.on('click', (e) => {
+                        L.DomEvent.stopPropagation(e);
+                        const cardId = `card-${pName.replace(/\s+/g, '-')}`;
+                        const card = document.getElementById(cardId);
+                        if(card) {
+                            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            card.click();
+                        }
+                    });
                 }
             }).addTo(map);
             map.fitBounds(geoLayer.getBounds());
@@ -135,148 +131,143 @@
     }
 
     function loadCSV() {
-        Papa.parse(CSV_URL, {
-            download: true,
-            header: true,
+        Papa.parse(DATA_CSV_URL, {
+            download: true, header: true, skipEmptyLines: true,
             complete: (results) => {
                 const history = {};
-                
                 results.data.forEach(row => {
                     const name = row.paddock_name;
                     if(!name) return;
+                    const ndvi = parseFloat(row.ndvi_mean); 
+                    const cloud = parseFloat(row.cloud_pc) || 0;
+                    let cover = 0;
+                    if (!isNaN(ndvi)) {
+                        let base = 7305.83 - (18654.48 * ndvi) + (15529.47 * Math.pow(ndvi, 2));
+                        let multi = cloud > 30 ? 1.2 : (cloud > 20 ? 1.1 : (cloud > 10 ? 1.05 : 1));
+                        cover = Math.max(0, Math.round(base * multi));
+                    }
                     if(!history[name]) history[name] = [];
-                    
-                    const parts = row.date.split('-');
-                    const sortDate = new Date(parts[0], 0);
-                    sortDate.setDate(parseInt(parts[2]));
-
+                    const dateObj = parseStrangeDate(row.date);
                     history[name].push({
-                        name: name,
-                        cover: Math.round(parseFloat(row.cover)) || 0,
-                        date: row.date,
-                        formattedDate: formatDOYDate(row.date),
-                        sortDate: sortDate.getTime(),
+                        name: name, cover: cover, dateObj: dateObj,
+                        formattedDate: dateObj.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' }),
                         url: row.map_id ? row.map_id.trim() : null
                     });
                 });
-
-                paddockData = Object.keys(history).map(name => {
-                    const sorted = history[name].sort((a,b) => b.sortDate - a.sortDate);
-                    const latest = sorted[0];
-                    const previous = sorted[1] || null;
-                    const area = areaLookup[name] || null;
-                    
-                    let growthRate = null;
-                    if (previous && latest.cover > previous.cover) {
-                        const dayDiff = (latest.sortDate - previous.sortDate) / (1000 * 60 * 60 * 24);
-                        if (dayDiff > 0) {
-                            growthRate = Math.round((latest.cover - previous.cover) / dayDiff);
-                        }
-                    }
-
-                    return { name, latest, previous, growthRate, area };
-                }).sort((a,b) => b.latest.cover - a.latest.cover);
-
-                // --- WEIGHTED CALCULATIONS ---
-                let totalWeightedCover = 0;
-                let totalWeightedGrowth = 0;
-                let totalAreaForCover = 0;
-                let totalAreaForGrowth = 0;
-                
-                paddockData.forEach(p => {
-                    if (p.area) {
-                        if (p.latest.cover) {
-                            totalWeightedCover += (p.latest.cover * p.area);
-                            totalAreaForCover += p.area;
-                        }
-                        if (p.growthRate !== null) {
-                            totalWeightedGrowth += (p.growthRate * p.area);
-                            totalAreaForGrowth += p.area;
-                        }
-                    }
-                });
-                
-                const weightedAvg = totalAreaForCover > 0 ? Math.round(totalWeightedCover / totalAreaForCover) : 0;
-                const weightedGrowth = totalAreaForGrowth > 0 ? Math.round(totalWeightedGrowth / totalAreaForGrowth) : 0;
-                
-                document.getElementById('total-avg').innerText = weightedAvg.toLocaleString();
-                document.getElementById('avg-growth').innerText = "+" + weightedGrowth.toLocaleString();
-                
-                renderList("");
-                
-                const firstTile = paddockData.find(p => p.latest.url);
-                if(firstTile) updateMapTile(firstTile.latest.url);
+                processPaddockData(history);
             }
         });
     }
 
-    function renderList(query) {
-        const container = document.getElementById('list');
-        container.innerHTML = "";
-        
-        paddockData.filter(p => p.name.toLowerCase().includes(query.toLowerCase())).forEach(p => {
+    function processPaddockData(history) {
+        paddockData = Object.keys(history).map(name => {
+            const sorted = history[name].sort((a,b) => b.dateObj - a.dateObj);
+            const latest = sorted[0];
+            const previous = sorted[1] || null;
+            const area = areaLookup[name] || 0;
+            const reason = excludedPaddocks.get(name.toLowerCase());
+            const isOut = !!reason;
+
+            let growthRate = null;
+            if (previous && latest.cover > previous.cover) {
+                const dayDiff = (latest.dateObj - previous.dateObj) / 86400000;
+                if (dayDiff > 0) growthRate = Math.round((latest.cover - previous.cover) / dayDiff);
+            }
+            return { name, latest, previous, growthRate, area, isOut, reason };
+        }).sort((a,b) => {
+            // --- UPDATED SORTING LOGIC ---
+            // If one is out and the other isn't, put the 'out' one later
+            if (a.isOut !== b.isOut) return a.isOut ? 1 : -1;
+            // Otherwise, sort by cover descending
+            return b.latest.cover - a.latest.cover;
+        });
+        renderDashboard();
+    }
+
+    function renderDashboard() {
+        let tWCover = 0, tWGrowth = 0, tAreaC = 0, tAreaG = 0;
+        paddockData.forEach(p => {
+            if (p.area > 0 && !p.isOut) {
+                tWCover += (p.latest.cover * p.area);
+                tAreaC += p.area;
+                if (p.growthRate) { tWGrowth += (p.growthRate * p.area); tAreaG += p.area; }
+            }
+        });
+        document.getElementById('total-avg').innerText = tAreaC > 0 ? Math.round(tWCover/tAreaC).toLocaleString() : "0";
+        document.getElementById('avg-growth').innerText = tAreaG > 0 ? "+" + Math.round(tWGrowth/tAreaG) : "0";
+
+        const list = document.getElementById('list');
+        list.innerHTML = "";
+        paddockData.forEach(p => {
             const div = document.createElement('div');
-            div.className = 'card';
+            div.className = `card ${p.isOut ? 'is-out' : ''}`;
             div.id = `card-${p.name.replace(/\s+/g, '-')}`;
             
-            let growthHTML = p.growthRate !== null ? `
-                <div class="growth-badge">
-                    <span class="growth-val">+${p.growthRate}</span>
-                    <span class="growth-unit">kg/day</span>
-                </div>
-            ` : '';
-
-            let areaHTML = p.area ? `<span class="area-tag">${p.area.toFixed(2)} ha</span>` : '';
+            let noticeBadge = "";
+            if (p.isOut) {
+                const label = p.reason.toUpperCase();
+                const bgColor = (label === 'CROP' || label === 'SILAGE') ? 'var(--warning)' : 'var(--out)';
+                noticeBadge = `<span class="badge" style="background:${bgColor}">${label}</span>`;
+            }
 
             let prevHTML = p.previous ? `
-                <div class="data-item">
+                <div>
                     <span class="label">Previous</span>
-                    <span class="val prev">${p.previous.cover}</span>
-                    <span class="date">${p.previous.formattedDate}</span>
+                    <span class="val prev">${p.previous.cover}<span class="unit">kgDM/ha</span></span>
+                    <br><small style="color:#95a5a6">${p.previous.formattedDate}</small>
                 </div>
-            ` : `<div></div>`;
+            ` : '<div></div>';
 
             div.innerHTML = `
-                ${growthHTML}
-                <div class="title-row">
-                    <b>${p.name}</b>
-                    ${areaHTML}
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+                    <b>${p.name} ${noticeBadge}</b>
+                    <span style="font-size:11px; background:#eee; padding:2px 5px; border-radius:3px">${p.area.toFixed(1)} ha</span>
                 </div>
-                <div class="data-grid">
-                    <div class="data-item">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+                    <div>
                         <span class="label">Latest Cover</span>
-                        <span class="val">${p.latest.cover}</span>
-                        <span class="date">${p.latest.formattedDate}</span>
+                        <span class="val">${p.latest.cover}<span class="unit">kgDM/ha</span></span>
+                        <br><small style="color:#95a5a6">${p.latest.formattedDate}</small>
                     </div>
                     ${prevHTML}
                 </div>
+                ${(p.growthRate && !p.isOut) ? `
+                    <div style="position:absolute; top:14px; right:60px; text-align:right">
+                        <span style="color:var(--growth); font-weight:bold">+${p.growthRate}</span><br>
+                        <small style="font-size:9px; color:#95a5a6">kg/day</small>
+                    </div>
+                ` : ''}
             `;
-            
             div.onclick = () => {
-                // UI Highlight
                 document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
                 div.classList.add('active');
-
-                // Map Actions
                 if(p.latest.url) updateMapTile(p.latest.url);
-                const layer = paddockMap[p.name];
-                if(layer) {
-                    map.fitBounds(layer.getBounds(), { padding: [50, 50] });
-                    geoLayer.setStyle({ color: 'white', weight: 1.5, fillOpacity: 0.1 }); 
-                    layer.setStyle({ color: '#2ecc71', weight: 4, fillOpacity: 0.2 });
+                if(paddockMap[p.name]) {
+                    map.fitBounds(paddockMap[p.name].getBounds(), { padding: [50, 50] });
+                    geoLayer.setStyle({ color: 'white', weight: 1.5, fillOpacity: 0.1 });
+                    paddockMap[p.name].setStyle({ color: p.isOut ? '#95a5a6' : 'var(--accent)', weight: 3, fillOpacity: 0.3 });
                 }
             };
-            container.appendChild(div);
+            list.appendChild(div);
         });
+        
+        const first = paddockData.find(p => p.latest.url && !p.isOut);
+        if(first) updateMapTile(first.latest.url);
     }
 
     function updateMapTile(url) {
         if(ndviLayer) map.removeLayer(ndviLayer);
         ndviLayer = L.tileLayer(url, { opacity: 0.7, maxZoom: 20 }).addTo(map);
-        if(geoLayer) geoLayer.bringToFront();
     }
 
-    document.getElementById('search').oninput = (e) => renderList(e.target.value);
+    document.getElementById('search').oninput = (e) => {
+        const query = e.target.value.toLowerCase();
+        document.querySelectorAll('.card').forEach(card => {
+            const name = card.querySelector('b').innerText.toLowerCase();
+            card.style.display = name.includes(query) ? 'block' : 'none';
+        });
+    };
+
     init();
 </script>
 </body>
