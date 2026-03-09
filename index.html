@@ -2047,7 +2047,7 @@
                 layer.setTooltipContent(`<div style="font-weight:bold; font-size:12px;">${pName}</div><div style="font-size:11px; color:#27ae60;">${p.latest.cover} kgDM</div>`);
 
                 if (currentDashboardMode === 'breaks') {
-                    layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', opacity: 0, weight: 0 });
+                    layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'white', opacity: 0.8, weight: 1.5 });
                 } else if (currentDashboardMode === 'manual' || currentDashboardMode === 'feed' || currentViewMode === 'cover') {
                     let color = getCoverColor(p.latest.cover);
                     if (p.isOut) color = '#ff7675'; else if (p.isPartial) color = '#3498db';
