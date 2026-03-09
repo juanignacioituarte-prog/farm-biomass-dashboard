@@ -229,6 +229,14 @@
             display: none;
         }
 
+        .legend-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+
         .legend-item {
             display: flex;
             align-items: center;
@@ -1040,24 +1048,27 @@
                 <button id="btn-cover" class="layer-btn" onclick="setLayerMode('cover')">COVER MAP</button>
             </div>
             <div id="legend" class="legend-box">
-                <div style="font-size: 9px; color: #999; margin-bottom: 8px; text-transform: uppercase;">Cover Scale
-                    (kgDM/ha)</div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:#00441b"></div> > 2,800
+                <div class="legend-header" onclick="toggleLegend()">
+                    <span style="font-size: 9px; color: #999; text-transform: uppercase;">Cover Scale (kgDM/ha)</span>
+                    <span id="legend-toggle-icon" style="font-size: 14px; color: #999; font-weight: bold; line-height: 1;">&minus;</span>
                 </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:#238b45"></div> 2,000 - 2,400
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:#a1d99b"></div>
-                    < 1,600</div>
-                        <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
-                        <div class="legend-item">
-                            <div class="legend-color" style="background:#3498db"></div> Partial Grazed
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background:#ff7675"></div> Out of Rotation
-                        </div>
+                <div id="legend-content">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#00441b"></div> > 2,800
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#238b45"></div> 2,000 - 2,400
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#a1d99b"></div> &lt; 1,600
+                    </div>
+                    <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#3498db"></div> Partial Grazed
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#ff7675"></div> Out of Rotation
+                    </div>
                 </div>
             </div>
 
@@ -1383,6 +1394,18 @@
             setTimeout(() => map.invalidateSize(), 300);
         }
 
+        function toggleLegend() {
+            const content = document.getElementById('legend-content');
+            const icon = document.getElementById('legend-toggle-icon');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.innerHTML = '&minus;';
+            } else {
+                content.style.display = 'none';
+                icon.innerHTML = '+';
+            }
+        }
+
         function toggleHeaderDetails() {
             const details = document.getElementById('header-details');
             const toggle = document.getElementById('header-toggle');
@@ -1390,12 +1413,19 @@
             toggle.classList.toggle('collapsed');
         }
 
-        // Auto-collapse header on mobile
+        // Auto-collapse header and legend on mobile
         if (window.innerWidth <= 768) {
             const details = document.getElementById('header-details');
             const toggle = document.getElementById('header-toggle');
             if (details) details.classList.add('collapsed');
             if (toggle) toggle.classList.add('collapsed');
+
+            const legendContent = document.getElementById('legend-content');
+            const legendIcon = document.getElementById('legend-toggle-icon');
+            if (legendContent && legendIcon) {
+                legendContent.style.display = 'none';
+                legendIcon.innerHTML = '+';
+            }
         }
 
         function toggleGPS() {
