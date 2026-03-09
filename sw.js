@@ -1,0 +1,64 @@
+const CACHE_NAME = 'rt-farm-v1.0.16';
+const ASSETS_TO_CACHE = [
+    './',
+    './index.html',
+    './icon-512.png',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
+    'https://cdn.jsdelivr.net/npm/chart.js'
+];
+
+self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.addAll(ASSETS_TO_CACHE).catch(err => {
+                console.log('Cache addAll failed for some assets:', err);
+            });
+        })
+    );
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        caches.keys().then(keys => {
+            return Promise.all(
+                keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+            );
+        })
+    );
+    self.clients.claim();
+});
+
+self.addEventListener('fetch', event => {
+    const url = new URL(event.request.url);
+
+    // Always fetch live data from Google Sheets and GCS (never cache)
+    if (url.hostname.includes('google') || url.hostname.includes('googleapis') || url.hostname.includes('storage.googleapis')) {
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match(event.request))
+        );
+        return;
+    }
+
+    // Cache-first for static assets
+    event.respondWith(
+        caches.match(event.request).then(cachedResponse => {
+            if (cachedResponse) return cachedResponse;
+            return fetch(event.request).then(networkResponse => {
+                // Cache new static assets
+                if (networkResponse.ok) {
+                    const clone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                }
+                return networkResponse;
+            });
+        }).catch(() => {
+            // Offline fallback
+            if (event.request.destination === 'document') {
+                return caches.match('./index.html');
+            }
+        })
+    );
+});
