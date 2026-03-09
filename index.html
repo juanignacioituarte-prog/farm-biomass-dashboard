@@ -2051,9 +2051,9 @@
                 } else if (currentDashboardMode === 'manual' || currentDashboardMode === 'feed' || currentViewMode === 'cover') {
                     let color = getCoverColor(p.latest.cover);
                     if (p.isOut) color = '#ff7675'; else if (p.isPartial) color = '#3498db';
-                    layer.setStyle({ fillColor: color, fillOpacity: 0.8, color: 'white', weight: 1 });
+                    layer.setStyle({ fillColor: color, fillOpacity: 0.8, color: 'white', opacity: 1, weight: 1 });
                 } else {
-                    layer.setStyle({ fillColor: 'transparent', fillOpacity: 0.1, color: 'white', weight: 1.5 });
+                    layer.setStyle({ fillColor: 'transparent', fillOpacity: 0.1, color: 'white', opacity: 1, weight: 1.5 });
                 }
             });
         }
