@@ -1188,6 +1188,7 @@
                         onclick="switchDashboardMode('breaks')">BREAKS</button>
                     <button id="btn-mode-admin" class="mode-btn" style="display:none;"
                         onclick="switchDashboardMode('admin')">INVITE</button>
+                    <button id="btn-logout" class="mode-btn" style="background:#e74c3c; color:white; border-color:#c0392b;" onclick="logout()">LOG OUT</button>
                 </div>
                 <button class="header-toggle" id="header-toggle" onclick="toggleHeaderDetails()">▼</button>
             </div>
@@ -2794,8 +2795,20 @@
         }
 
         window.handleCredentialResponse = function (response) {
-            const responsePayload = parseJwt(response.credential);
-            const userEmail = responsePayload.email.toLowerCase();
+            let userEmail;
+            
+            // If response is passed from Google Sign-In
+            if (response && response.credential) {
+                const responsePayload = parseJwt(response.credential);
+                userEmail = responsePayload.email.toLowerCase();
+            } else {
+                // If checking from localStorage auto-login
+                userEmail = response;
+            }
+
+            if (!userEmail) return;
+
+            document.getElementById('debug-email').innerText = "Checking authorization...";
 
             // Fetch authorized list from config spreadsheet CSV
             Papa.parse(AUTH_CSV_URL + "&t=" + Date.now(), {
@@ -2808,11 +2821,15 @@
                         .filter(e => e.length > 0);
 
                     if (userEmail === ADMIN_EMAIL.toLowerCase() || authorized.includes(userEmail)) {
+                        // Authorized! Keep email in local storage for next time
+                        localStorage.setItem('auth_email', userEmail);
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('btn-mode-admin').style.display = 'none';
                         init();
                         loadBreaks();
                     } else {
+                        // If they failed authorization, make sure they are signed out locally
+                        localStorage.removeItem('auth_email');
                         showUnauthorized(userEmail);
                     }
                 },
@@ -2820,11 +2837,13 @@
                     console.error("Auth fetch failed:", err);
                     if (userEmail === ADMIN_EMAIL.toLowerCase()) {
                          // Always fallback to allow admin even if CSV fails
+                        localStorage.setItem('auth_email', userEmail);
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('btn-mode-admin').style.display = 'none';
                         init();
                         loadBreaks();
                     } else {
+                        localStorage.removeItem('auth_email');
                         showUnauthorized(userEmail);
                     }
                 }
@@ -2842,6 +2861,20 @@
                 requestBtn.href = `mailto:${ADMIN_EMAIL}?subject=Farm App Access Request&body=Hi, please grant access to the River Terrace Farm App for my email: ${email}`;
             }
         }
+        
+        function logout() {
+            localStorage.removeItem('auth_email');
+            window.location.reload();
+        }
+
+        // Auto-Login Check on Boot
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedEmail = localStorage.getItem('auth_email');
+            if (savedEmail) {
+                // Skips Google prompt, attempts authentication silently
+                handleCredentialResponse(savedEmail);
+            }
+        });
         
         // Register Service Worker for PWA
         if ('serviceWorker' in navigator) {
