@@ -2393,6 +2393,7 @@
                 areaSqm: areaSqm,
                 areaHa: areaHa,
                 createdAt: new Date().toISOString(),
+                createdBy: localStorage.getItem('auth_name') || 'Unknown User',
                 group: activeBreakGroup === 'all' ? '1st' : activeBreakGroup
             };
             savedBreaks.push(newBreak);
@@ -2590,6 +2591,7 @@
                                 <span class="label">CREATED</span>
                                 <div style="font-size:13px; font-weight:600; color:#2c3e50;">${dateStr}</div>
                                 <div style="font-size:10px; color:#95a5a6; margin-top:2px;">${timeStr}</div>
+                                <div style="font-size:10px; color:#bbb; margin-top:2px;">Created by: ${brk.createdBy || 'Unknown'}</div>
                             </div>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
@@ -2815,14 +2817,19 @@
                 download: true,
                 header: false,
                 complete: function(results) {
-                    const authorized = results.data
-                        .flat()
-                        .map(e => (e || "").trim().toLowerCase())
-                        .filter(e => e.length > 0);
+                    const authorizedMap = {};
+                    results.data.forEach(row => {
+                        const email = (row[0] || "").trim().toLowerCase();
+                        const name = (row[1] || "Unknown User").trim();
+                        if (email) authorizedMap[email] = name;
+                    });
 
-                    if (userEmail === ADMIN_EMAIL.toLowerCase() || authorized.includes(userEmail)) {
-                        // Authorized! Keep email in local storage for next time
+                    if (userEmail === ADMIN_EMAIL.toLowerCase() || authorizedMap.hasOwnProperty(userEmail)) {
+                        // Authorized! Keep email and name in local storage for next time
+                        const userName = authorizedMap[userEmail] || "Admin"; // Fallback to Admin if admin email
                         localStorage.setItem('auth_email', userEmail);
+                        localStorage.setItem('auth_name', userName);
+                        
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('btn-mode-admin').style.display = 'none';
                         init();
@@ -2838,12 +2845,14 @@
                     if (userEmail === ADMIN_EMAIL.toLowerCase()) {
                          // Always fallback to allow admin even if CSV fails
                         localStorage.setItem('auth_email', userEmail);
+                        localStorage.setItem('auth_name', "Admin");
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('btn-mode-admin').style.display = 'none';
                         init();
                         loadBreaks();
                     } else {
                         localStorage.removeItem('auth_email');
+                        localStorage.removeItem('auth_name');
                         showUnauthorized(userEmail);
                     }
                 }
@@ -2864,6 +2873,7 @@
         
         function logout() {
             localStorage.removeItem('auth_email');
+            localStorage.removeItem('auth_name');
             window.location.reload();
         }
 
