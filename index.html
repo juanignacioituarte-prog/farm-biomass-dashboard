@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <style>
         :root {
             --accent: #2ecc71;
@@ -222,19 +223,81 @@
 
         .legend-box {
             background: white;
-            padding: 12px;
+            padding: 0;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
             width: 180px;
             display: none;
+            overflow: hidden;
         }
 
         .legend-header {
+            padding: 8px 12px;
+            background: #eee;
+            font-size: 10px;
+            font-weight: 800;
+            color: #666;
+            text-transform: uppercase;
+            cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        .legend-header:hover {
+            background: #e5e5e5;
+        }
+
+        .legend-content {
+            padding: 12px;
+            display: block;
+        }
+
+        .legend-content.collapsed {
+            display: none;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 10001;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 120px;
+        }
+
+        .dropdown-item {
+            padding: 12px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
             cursor: pointer;
-            margin-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .dropdown-item:hover {
+            background: #f4f7f6;
+        }
+
+        .btn-dots {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #777;
+            padding: 5px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .legend-item {
@@ -567,11 +630,11 @@
         }
 
         .break-toolbar {
-            position: absolute;
+            position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 1100;
+            z-index: 99999;
             background: rgba(0, 0, 0, 0.85);
             color: white;
             padding: 12px 20px;
@@ -991,7 +1054,7 @@
             margin-bottom: 20px;
         }
 
-        .google-auth.hidden {
+        .hidden {
             display: none !important;
         }
 
@@ -999,10 +1062,6 @@
             color: #e74c3c;
             margin-top: 15px;
             max-width: 80%;
-        }
-
-        .hidden {
-            display: none !important;
         }
 
         .btn-request-access {
@@ -1049,10 +1108,10 @@
             </div>
             <div id="legend" class="legend-box">
                 <div class="legend-header" onclick="toggleLegend()">
-                    <span style="font-size: 9px; color: #999; text-transform: uppercase;">Cover Scale (kgDM/ha)</span>
-                    <span id="legend-toggle-icon" style="font-size: 14px; color: #999; font-weight: bold; line-height: 1;">&minus;</span>
+                    <span>COVER SCALE (kgDM/ha)</span>
+                    <span id="legend-toggle-icon">▼</span>
                 </div>
-                <div id="legend-content">
+                <div id="legend-content" class="legend-content">
                     <div class="legend-item">
                         <div class="legend-color" style="background:#00441b"></div> > 2,800
                     </div>
@@ -1060,7 +1119,7 @@
                         <div class="legend-color" style="background:#238b45"></div> 2,000 - 2,400
                     </div>
                     <div class="legend-item">
-                        <div class="legend-color" style="background:#a1d99b"></div> &lt; 1,600
+                        <div class="legend-color" style="background:#a1d99b"></div> < 1,600
                     </div>
                     <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
                     <div class="legend-item">
@@ -1070,26 +1129,6 @@
                         <div class="legend-color" style="background:#ff7675"></div> Out of Rotation
                     </div>
                 </div>
-            </div>
-
-            <!-- Break Drawing Toolbar -->
-            <div id="break-toolbar" class="break-toolbar" onmousedown="event.stopPropagation()"
-                onclick="event.stopPropagation()">
-                <span class="vertex-count" id="vertex-count">0 points</span>
-                <button class="btn-undo" onclick="event.stopPropagation(); undoLastVertex()">↩ Undo</button>
-                <button class="btn-finish" id="btn-finish-break" onclick="event.stopPropagation(); finishBreak()"
-                    disabled>✓ Finish</button>
-                <button class="btn-cancel" onclick="event.stopPropagation(); cancelBreak()">✕ Cancel</button>
-            </div>
-
-            <!-- Break Edit Toolbar -->
-            <div id="edit-toolbar" class="break-toolbar" onmousedown="event.stopPropagation()"
-                onclick="event.stopPropagation()">
-                <span class="vertex-count" id="edit-vertex-info">Editing</span>
-                <button class="btn-delete-pt" id="btn-delete-pt" onclick="event.stopPropagation(); deleteEditVertex()"
-                    disabled>✕ Delete Point</button>
-                <button class="btn-done" onclick="event.stopPropagation(); finishEditBreak()">✓ Done</button>
-                <button class="btn-cancel" onclick="event.stopPropagation(); cancelEditBreak()">✕ Cancel</button>
             </div>
 
         </div>
@@ -1166,6 +1205,13 @@
             </div>
 
             <div class="feed-card">
+                <div class="feed-title">Herd Management</div>
+                <div class="calc-grid" id="herd-inputs">
+                    <!-- Herds will be injected here -->
+                </div>
+            </div>
+
+            <div class="feed-card">
                 <div class="feed-title">Supplement Calculator</div>
                 <div class="calc-grid">
                     <div class="input-group">
@@ -1187,8 +1233,13 @@
     </div>
 
     <div id="sidebar">
-        <div class="header">
-            <div style="display:flex; align-items:center; gap:4px;">
+        <div class="header" style="position:relative;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <button class="btn-dots" onclick="toggleSettingsMenu()">⋮</button>
+                <div id="settings-menu" class="dropdown-menu">
+                    <div class="dropdown-item" id="menu-item-admin" style="display:none;" onclick="switchDashboardMode('admin'); toggleSettingsMenu();">Invite Users</div>
+                    <div class="dropdown-item" onclick="location.reload()">Refresh App</div>
+                </div>
                 <div class="mode-toggle-container" style="flex:1; margin-bottom:0;">
                     <button id="btn-mode-sat" class="mode-btn"
                         onclick="switchDashboardMode('satellite')">SATELLITE</button>
@@ -1197,9 +1248,6 @@
                     <button id="btn-mode-feed" class="mode-btn" onclick="switchDashboardMode('feed')">FEED</button>
                     <button id="btn-mode-breaks" class="mode-btn"
                         onclick="switchDashboardMode('breaks')">BREAKS</button>
-                    <button id="btn-mode-admin" class="mode-btn" style="display:none;"
-                        onclick="switchDashboardMode('admin')">INVITE</button>
-                    <button id="btn-logout" class="mode-btn" style="background:#e74c3c; color:white; border-color:#c0392b;" onclick="logout()">LOG OUT</button>
                 </div>
                 <button class="header-toggle" id="header-toggle" onclick="toggleHeaderDetails()">▼</button>
             </div>
@@ -1304,7 +1352,8 @@
             { id: '1st', name: '1st Herd', color: '#3498db' },
             { id: '2nd', name: '2nd Herd', color: '#2ecc71' },
             { id: '3rd', name: '3rd Herd', color: '#f39c12' },
-            { id: 'pennos', name: 'Pennos', color: '#e74c3c' }
+            { id: 'pennos', name: 'Pennos', color: '#e74c3c' },
+            { id: 'crops', name: 'Crops', color: '#d35400' }
         ];
         let activeBreakGroup = 'all';
 
@@ -1394,23 +1443,37 @@
             setTimeout(() => map.invalidateSize(), 300);
         }
 
-        function toggleLegend() {
-            const content = document.getElementById('legend-content');
-            const icon = document.getElementById('legend-toggle-icon');
-            if (content.style.display === 'none') {
-                content.style.display = 'block';
-                icon.innerHTML = '&minus;';
-            } else {
-                content.style.display = 'none';
-                icon.innerHTML = '+';
-            }
-        }
-
         function toggleHeaderDetails() {
             const details = document.getElementById('header-details');
             const toggle = document.getElementById('header-toggle');
             details.classList.toggle('collapsed');
             toggle.classList.toggle('collapsed');
+        }
+
+        function toggleSettingsMenu() {
+            const menu = document.getElementById('settings-menu');
+            const isVisible = menu.style.display === 'flex';
+            menu.style.display = isVisible ? 'none' : 'flex';
+            
+            // Close menu if clicking outside
+            if (!isVisible) {
+                setTimeout(() => {
+                    const closeMenu = (e) => {
+                        if (!menu.contains(e.target) && !e.target.classList.contains('btn-dots')) {
+                            menu.style.display = 'none';
+                            document.removeEventListener('click', closeMenu);
+                        }
+                    };
+                    document.addEventListener('click', closeMenu);
+                }, 10);
+            }
+        }
+
+        function toggleLegend() {
+            const content = document.getElementById('legend-content');
+            const icon = document.getElementById('legend-toggle-icon');
+            const isCollapsed = content.classList.toggle('collapsed');
+            icon.textContent = isCollapsed ? '▶' : '▼';
         }
 
         // Auto-collapse header and legend on mobile
@@ -1419,13 +1482,14 @@
             const toggle = document.getElementById('header-toggle');
             if (details) details.classList.add('collapsed');
             if (toggle) toggle.classList.add('collapsed');
-
-            const legendContent = document.getElementById('legend-content');
-            const legendIcon = document.getElementById('legend-toggle-icon');
-            if (legendContent && legendIcon) {
-                legendContent.style.display = 'none';
-                legendIcon.innerHTML = '+';
-            }
+            
+            // Wait for DOM to then collapse legend
+            setTimeout(() => {
+                const legendContent = document.getElementById('legend-content');
+                const legendIcon = document.getElementById('legend-toggle-icon');
+                if (legendContent) legendContent.classList.add('collapsed');
+                if (legendIcon) legendIcon.textContent = '▶';
+            }, 500);
         }
 
         function toggleGPS() {
@@ -1537,7 +1601,7 @@
                             const growth = isOut ? 0 : Math.round((latestCover - prevCover) / dayDiff);
 
                             return {
-                                name, latest: { cover: latestCover, formattedDate: fmtNZ(latestDate) },
+                                name, latest: { cover: latestCover, formattedDate: fmtNZ(latestDate), ts: latestDate ? latestDate.getTime() : null },
                                 previous: { cover: prevCover, formattedDate: fmtNZ(prevDate) },
                                 growthRate: growth, isOut: isOut, area: areaLookup[name] || 0
                             };
@@ -1649,11 +1713,30 @@
         }
 
         function setFeedInputs(data) {
-            if (data.residual) document.getElementById('inp-residual').value = data.residual;
-            if (data.cows) document.getElementById('inp-cows').value = data.cows;
-            if (data.intake) document.getElementById('inp-intake').value = data.intake;
-            if (data.round) document.getElementById('inp-round').value = data.round;
-            if (data.pre) document.getElementById('inp-actual-pre').value = data.pre;
+            if (data.residual) {
+                document.getElementById('inp-residual').value = data.residual;
+                localStorage.setItem('feed_residual', data.residual);
+            }
+            if (data.cows) {
+                document.getElementById('inp-cows').value = data.cows;
+                localStorage.setItem('feed_cows', data.cows);
+            }
+            if (data.intake) {
+                document.getElementById('inp-intake').value = data.intake;
+                localStorage.setItem('feed_intake', data.intake);
+            }
+            if (data.round) {
+                document.getElementById('inp-round').value = data.round;
+                localStorage.setItem('feed_round', data.round);
+            }
+            if (data.pre) {
+                document.getElementById('inp-actual-pre').value = data.pre;
+                localStorage.setItem('feed_actual_pre', data.pre);
+            }
+            if (data.herdCows) {
+                localStorage.setItem('herd_cow_numbers', JSON.stringify(data.herdCows));
+                loadLocalFeedSettings();
+            }
         }
 
         function loadLocalFeedSettings() {
@@ -1662,6 +1745,21 @@
             if (localStorage.getItem('feed_intake')) document.getElementById('inp-intake').value = localStorage.getItem('feed_intake');
             if (localStorage.getItem('feed_round')) document.getElementById('inp-round').value = localStorage.getItem('feed_round');
             if (localStorage.getItem('feed_actual_pre')) document.getElementById('inp-actual-pre').value = localStorage.getItem('feed_actual_pre');
+
+            // Load Herd Inputs
+            const herdGrid = document.getElementById('herd-inputs');
+            if (herdGrid) {
+                herdGrid.innerHTML = '';
+                const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+                BREAK_GROUPS.forEach(g => {
+                    if (g.id === 'all') return;
+                    const val = savedHerdCows[g.id] || 0;
+                    const div = document.createElement('div');
+                    div.className = 'input-group';
+                    div.innerHTML = `<label style="color:${g.color}; font-weight:bold;">${g.name}</label><input type="number" id="herd-cows-${g.id}" value="${val}" oninput="saveAndRecalc()">`;
+                    herdGrid.appendChild(div);
+                });
+            }
             calculateFeedLogic();
         }
 
@@ -1790,6 +1888,9 @@
                     document.getElementById('list').style.display = 'none';
                     document.getElementById('admin-view').style.display = 'block';
                     loadAuthorizedEmails();
+                    
+                    // Highlight the dots menu temporarily or just deactivate other buttons
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
                     return;
                 } else {
                     setLayerMode(currentViewMode);
@@ -2089,6 +2190,9 @@
                 } else {
                     layer.setStyle({ fillColor: 'transparent', fillOpacity: 0.1, color: 'white', opacity: 1, weight: 1.5 });
                 }
+
+                // CRITICAL: Bring boundary to the very top so it stays above satellite tiles
+                if (layer.bringToFront) layer.bringToFront();
             });
         }
 
@@ -2114,6 +2218,102 @@
             if (currentDashboardMode === 'satellite' && currentViewMode === 'ndvi') ndviLayer.addTo(map);
         }
 
+        /* FOLLOW CONTOUR LOGIC */
+        function followPaddockContour() {
+            if (!isDrawingBreak || drawingVertices.length < 3) return;
+            
+            // 1. Find paddock
+            let centerLat = 0, centerLng = 0;
+            drawingVertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
+            centerLat /= drawingVertices.length;
+            centerLng /= drawingVertices.length;
+            let paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
+            
+            if (!paddockName || !paddockMap[paddockName]) {
+                return alert("No paddock found under drawing. Draw points inside a paddock first.");
+            }
+
+            const paddockFeat = paddockMap[paddockName].feature;
+            
+            // 2. Snap points near the paddock boundary
+            try {
+                const paddockBoundary = turf.polygonToLine(paddockFeat);
+                const SNAP_METERS = 30; // Increased snap range to 30m
+
+                const snappedVertices = drawingVertices.map(v => {
+                    const pt = turf.point([v.lng, v.lat]);
+                    const nearest = turf.nearestPointOnLine(paddockBoundary, pt);
+                    const dist = turf.distance(pt, nearest, { units: 'meters' });
+                    
+                    if (dist < SNAP_METERS) {
+                        return { lat: nearest.geometry.coordinates[1], lng: nearest.geometry.coordinates[0] };
+                    }
+                    return { ...v }; // return original if far
+                });
+                
+                // Update state with snapped points
+                drawingVertices = snappedVertices;
+                
+                // Refresh map drawing
+                drawingMarkers.forEach(m => map.removeLayer(m));
+
+                    const gColor = getGroupColor(activeBreakGroup);
+                    drawingMarkers = drawingVertices.map((v, idx) => {
+                        const marker = L.marker([v.lat, v.lng], {
+                            draggable: true,
+                            icon: L.divIcon({
+                                className: 'break-vertex-icon',
+                                html: `<div style="background:${gColor}; width:10px; height:10px; border-radius:50%; border:2px solid white; box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>`,
+                                iconSize: [14, 14],
+                                iconAnchor: [7, 7]
+                            })
+                        }).addTo(map);
+                        
+                        marker.on('drag', (e) => {
+                            const newPos = e.target.getLatLng();
+                            drawingVertices[idx] = { lat: newPos.lat, lng: newPos.lng };
+                            redrawDrawingLayers();
+                            updateVertexCount();
+                        });
+                        return marker;
+                    });
+                    redrawDrawingLayers();
+                    updateVertexCount();
+            } catch (err) {
+                console.error("Contour clip failed:", err);
+                alert("Failed to clip contour. Points might be crossing each other.");
+            }
+        }
+
+        function redrawDrawingLayers() {
+            if (drawingPolyline) map.removeLayer(drawingPolyline);
+            if (drawingPolygon) map.removeLayer(drawingPolygon);
+            const gColor = getGroupColor(activeBreakGroup);
+            const coords = drawingVertices.map(v => [v.lat, v.lng]);
+            if (drawingVertices.length >= 2) {
+                drawingPolyline = L.polyline(coords, { color: gColor, weight: 2, dashArray: '6, 4', opacity: 0.8 }).addTo(map);
+            }
+            if (drawingVertices.length >= 3) {
+                drawingPolygon = L.polygon(coords, { color: gColor, weight: 2, fillColor: gColor, fillOpacity: 0.15, dashArray: '6, 4' }).addTo(map);
+            }
+        }
+
+        function updateVertexCount() {
+            const count = drawingVertices.length;
+            let info = `${count} point${count !== 1 ? 's' : ''}`;
+            if (count >= 3) {
+                const areaSqm = calculatePolygonArea(drawingVertices);
+                const areaHa = areaSqm / 10000;
+                info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
+                document.getElementById('btn-follow-contour').style.display = 'block';
+                document.getElementById('btn-finish-break').disabled = false;
+            } else {
+                document.getElementById('btn-follow-contour').style.display = 'none';
+                document.getElementById('btn-finish-break').disabled = true;
+            }
+            document.getElementById('vertex-count').textContent = info;
+        }
+
         document.getElementById('search').oninput = (e) => {
             const q = e.target.value.toLowerCase();
             document.querySelectorAll('.card').forEach(c => c.style.display = c.querySelector('b').innerText.toLowerCase().includes(q) ? 'block' : 'none');
@@ -2121,13 +2321,35 @@
 
         /* FEED CALCULATOR LOGIC */
         function saveAndRecalc() {
-            // Save to LocalStorage instantly
             localStorage.setItem('feed_residual', document.getElementById('inp-residual').value);
             localStorage.setItem('feed_cows', document.getElementById('inp-cows').value);
             localStorage.setItem('feed_intake', document.getElementById('inp-intake').value);
             localStorage.setItem('feed_round', document.getElementById('inp-round').value);
             localStorage.setItem('feed_actual_pre', document.getElementById('inp-actual-pre').value);
 
+            let totalCows = 0;
+            const herdCows = {};
+            let hasHerdInputs = false;
+            BREAK_GROUPS.forEach(g => {
+                if (g.id === 'all') return;
+                const el = document.getElementById(`herd-cows-${g.id}`);
+                if (el) {
+                    hasHerdInputs = true;
+                    const val = parseFloat(el.value) || 0;
+                    herdCows[g.id] = val;
+                    totalCows += val;
+                }
+            });
+            
+            // Sync total cows to main input if using herd splits
+            if (totalCows > 0) {
+                document.getElementById('inp-cows').value = totalCows;
+                localStorage.setItem('feed_cows', totalCows);
+            }
+
+            if (hasHerdInputs) {
+                localStorage.setItem('herd_cow_numbers', JSON.stringify(herdCows));
+            }
             calculateFeedLogic();
         }
 
@@ -2253,7 +2475,8 @@
                 cows: document.getElementById('inp-cows').value,
                 intake: document.getElementById('inp-intake').value,
                 round: document.getElementById('inp-round').value,
-                pre: document.getElementById('inp-actual-pre').value
+                pre: document.getElementById('inp-actual-pre').value,
+                herdCows: JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}')
             };
 
             fetch(GOOGLE_SCRIPT_URL, {
@@ -2332,6 +2555,67 @@
             return area;
         }
 
+        function subdivideLongSegments(vertices, maxDistMeters) {
+            if (vertices.length < 2) return vertices;
+            let newVertices = [];
+            for (let i = 0; i < vertices.length; i++) {
+                newVertices.push(vertices[i]);
+                const nextIdx = (i + 1) % vertices.length;
+                if (vertices.length < 3 && nextIdx === 0) continue; // It's a line/segment, don't close it to origin
+                
+                const p1 = L.latLng(vertices[i].lat, vertices[i].lng);
+                const p2 = L.latLng(vertices[nextIdx].lat, vertices[nextIdx].lng);
+                const dist = p1.distanceTo(p2);
+                
+                if (dist > maxDistMeters) {
+                    const numSplits = Math.ceil(dist / maxDistMeters);
+                    for (let j = 1; j < numSplits; j++) {
+                        const frac = j / numSplits;
+                        const mLat = vertices[i].lat + (vertices[nextIdx].lat - vertices[i].lat) * frac;
+                        const mLng = vertices[i].lng + (vertices[nextIdx].lng - vertices[i].lng) * frac;
+                        newVertices.push({ lat: mLat, lng: mLng });
+                    }
+                }
+            }
+            return newVertices;
+        }
+
+        function rebuildDrawingMarkers() {
+            drawingMarkers.forEach(m => map.removeLayer(m));
+            drawingMarkers = [];
+            const gColor = getGroupColor(activeBreakGroup);
+            drawingVertices.forEach((v, idx) => {
+                const marker = L.marker([v.lat, v.lng], {
+                    draggable: true,
+                    icon: L.divIcon({
+                        className: 'break-vertex-icon',
+                        html: `<div style="background:${gColor}; width:10px; height:10px; border-radius:50%; border:2px solid white; box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>`,
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
+                    })
+                }).addTo(map);
+
+                marker.on('drag', (ev) => {
+                    const newPos = ev.target.getLatLng();
+                    drawingVertices[idx] = { lat: newPos.lat, lng: newPos.lng };
+                    redrawDrawingLayers();
+                    updateVertexCount();
+                });
+
+                marker.on('dragend', () => {
+                    const newV = subdivideLongSegments(drawingVertices, 40);
+                    if (newV.length !== drawingVertices.length) {
+                        drawingVertices = newV;
+                        rebuildDrawingMarkers();
+                    }
+                });
+
+                drawingMarkers.push(marker);
+            });
+            redrawDrawingLayers();
+            updateVertexCount();
+        }
+
         function startDrawingBreak() {
             if (isDrawingBreak) return;
             isDrawingBreak = true;
@@ -2351,58 +2635,13 @@
             if (!isDrawingBreak) return;
             const latLng = e.latlng;
             drawingVertices.push({ lat: latLng.lat, lng: latLng.lng });
-            const gColor = getGroupColor(activeBreakGroup);
-            const marker = L.circleMarker(latLng, {
-                radius: 5, color: gColor, fillColor: gColor,
-                fillOpacity: 1, weight: 2
-            }).addTo(map);
-            drawingMarkers.push(marker);
-            if (drawingPolyline) map.removeLayer(drawingPolyline);
-            if (drawingPolygon) map.removeLayer(drawingPolygon);
-            if (drawingVertices.length >= 2) {
-                const coords = drawingVertices.map(v => [v.lat, v.lng]);
-                drawingPolyline = L.polyline(coords, { color: gColor, weight: 2, dashArray: '6, 4', opacity: 0.8 }).addTo(map);
-            }
-            if (drawingVertices.length >= 3) {
-                const coords = drawingVertices.map(v => [v.lat, v.lng]);
-                drawingPolygon = L.polygon(coords, { color: gColor, weight: 2, fillColor: gColor, fillOpacity: 0.15, dashArray: '6, 4' }).addTo(map);
-                document.getElementById('btn-finish-break').disabled = false;
-            }
-            const count = drawingVertices.length;
-            let info = `${count} point${count !== 1 ? 's' : ''}`;
-            if (count >= 3) {
-                const areaSqm = calculatePolygonArea(drawingVertices);
-                const areaHa = areaSqm / 10000;
-                info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
-            }
-            document.getElementById('vertex-count').textContent = info;
+            rebuildDrawingMarkers();
         }
 
         function undoLastVertex() {
             if (drawingVertices.length === 0) return;
             drawingVertices.pop();
-            const lastMarker = drawingMarkers.pop();
-            if (lastMarker) map.removeLayer(lastMarker);
-            if (drawingPolyline) { map.removeLayer(drawingPolyline); drawingPolyline = null; }
-            if (drawingPolygon) { map.removeLayer(drawingPolygon); drawingPolygon = null; }
-            const gColor = getGroupColor(activeBreakGroup);
-            if (drawingVertices.length >= 2) {
-                const coords = drawingVertices.map(v => [v.lat, v.lng]);
-                drawingPolyline = L.polyline(coords, { color: gColor, weight: 2, dashArray: '6, 4', opacity: 0.8 }).addTo(map);
-            }
-            if (drawingVertices.length >= 3) {
-                const coords = drawingVertices.map(v => [v.lat, v.lng]);
-                drawingPolygon = L.polygon(coords, { color: gColor, weight: 2, fillColor: gColor, fillOpacity: 0.15, dashArray: '6, 4' }).addTo(map);
-            }
-            document.getElementById('btn-finish-break').disabled = drawingVertices.length < 3;
-            const count = drawingVertices.length;
-            let info = `${count} point${count !== 1 ? 's' : ''}`;
-            if (count >= 3) {
-                const areaSqm = calculatePolygonArea(drawingVertices);
-                const areaHa = areaSqm / 10000;
-                info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
-            }
-            document.getElementById('vertex-count').textContent = info;
+            rebuildDrawingMarkers();
         }
 
         function finishBreak() {
@@ -2450,9 +2689,20 @@
             if (drawingPolygon) { map.removeLayer(drawingPolygon); drawingPolygon = null; }
             drawingVertices = [];
             document.getElementById('break-toolbar').style.display = 'none';
+            document.getElementById('btn-follow-contour').style.display = 'none';
             map.getContainer().style.cursor = '';
             map.off('click', onMapClickForBreak);
             setBreakFullscreen(false);
+        }
+
+        function promptDeleteBreak(breakId, event) {
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            if (confirm("Are you sure you want to delete this break?")) {
+                deleteBreak(breakId);
+            }
         }
 
         function deleteBreak(breakId) {
@@ -2545,10 +2795,10 @@
             const groupBreaks = activeBreakGroup === 'all' ? savedBreaks : savedBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
             const count = groupBreaks.length;
 
-            // Calculate avg area/day globally (all breaks)
+            // Calculate avg area/day globally (excluding crops)
             const now = new Date();
             const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const recentBreaksAll = savedBreaks.filter(b => new Date(b.createdAt) >= sevenDaysAgo);
+            const recentBreaksAll = savedBreaks.filter(b => b.group !== 'crops' && new Date(b.createdAt) >= sevenDaysAgo);
             const recentAreaAll = recentBreaksAll.reduce((sum, b) => sum + b.areaHa, 0);
             const daysWithBreaks = new Set(recentBreaksAll.map(b => new Date(b.createdAt).toDateString())).size;
             const avgAreaPerDay = daysWithBreaks > 0 ? (recentAreaAll / daysWithBreaks) : 0;
@@ -2610,9 +2860,9 @@
                 html += `<div class="break-card ${isSelected ? 'selected' : ''}" id="break-${brk.id}" onclick="${cardClick}" style="border-left: 4px solid ${gColor};">
                         ${breakSelectMode
                         ? `<input type="checkbox" class="break-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleBreakSelection('${brk.id}', event)" style="position:absolute; top:14px; right:10px;" />`
-                        : `<button class="btn-edit-break" onclick="event.stopPropagation(); startEditBreak('${brk.id}')" title="Edit vertices">\u270e</button><button class="btn-delete-break" onclick="event.stopPropagation(); if(confirm('Delete this break?')) deleteBreak('${brk.id}')" title="Delete break">\u2715</button>`
+                        : `<button class="btn-edit-break" onclick="event.stopPropagation(); startEditBreak('${brk.id}')" title="Edit vertices">\u270e</button><button class="btn-delete-break" onclick="promptDeleteBreak('${brk.id}', event)" title="Delete break">\ud83d\uddd1\ufe0f</button>`
                     }
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-right:24px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-right:50px;">
                             <input class="break-name-input" value="${brk.name}" onchange="renameBreak('${brk.id}', this.value)" onclick="event.stopPropagation()" />
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
@@ -2622,15 +2872,33 @@
                                 ${brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`}
                             </div>
                             <div>
-                                <span class="label">CREATED</span>
-                                <div style="font-size:13px; font-weight:600; color:#2c3e50;">${dateStr}</div>
-                                <div style="font-size:10px; color:#95a5a6; margin-top:2px;">${timeStr}</div>
-                                <div style="font-size:10px; color:#bbb; margin-top:2px;">Created by: ${brk.createdBy || 'Unknown'}</div>
+                                <span class="label">EST. KG/COW</span>
+                                <div style="font-size:13px; font-weight:600; color:var(--accent);">
+                                    ${(() => {
+                                        const paddockName = brk.paddock || "";
+                                        const p = manualModeData.find(pd => pd.name === paddockName);
+                                        if (p && p.latest) {
+                                            const dataTs = p.latest.ts || selectedSceneTs;
+                                            const daysSince = dataTs ? Math.floor((Date.now() - dataTs) / 86400000) : 0;
+                                            const grower = farmGrowthRate || 0;
+                                            const estimatedCover = (parseFloat(p.latest.cover) || 0) + (grower * daysSince);
+                                            const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
+                                            const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+                                            const cowNum = savedHerdCows[brk.group] || 0;
+                                            if (cowNum > 0) {
+                                                const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
+                                                return (totalKg / cowNum).toFixed(1) + ' kg';
+                                            }
+                                        }
+                                        return '--';
+                                    })()}
+                                </div>
+                                <div style="font-size:10px; color:#95a5a6; margin-top:2px;">per cow</div>
                             </div>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
                             <input class="break-name-input" type="text" placeholder="Add comment..." value="${brk.comment || ''}" onchange="updateBreakComment('${brk.id}', this.value)" onclick="event.stopPropagation()" style="flex:1; font-size: 11px; font-weight: normal; color: #555; background: #fdfdfd; border: 1px solid #eee; padding: 4px 6px; border-radius:3px;">
-                            <div style="font-size:10px; color:#bbb; margin-left:10px;">${brk.vertices.length} pts</div>
+                            <div style="font-size:11px; color:#bbb; margin-left:10px; font-weight:bold;">BY ${brk.createdBy ? brk.createdBy.toUpperCase().split(' ')[0] : '???'}</div>
                         </div>
                     </div>`;
             });
@@ -2692,62 +2960,44 @@
             editMarkers = [];
             editVertices.forEach((v, i) => {
                 const isSelected = (i === editSelectedIdx);
-                const marker = L.circleMarker([v.lat, v.lng], {
-                    radius: isSelected ? 8 : 6,
-                    color: isSelected ? '#e74c3c' : '#8e44ad',
-                    fillColor: isSelected ? '#e74c3c' : '#9b59b6',
-                    fillOpacity: 1, weight: isSelected ? 3 : 2,
-                    draggable: true
+                const bgColor = isSelected ? '#e74c3c' : '#9b59b6';
+                const size = isSelected ? 16 : 14;
+                const offset = size / 2;
+                
+                const icon = L.divIcon({
+                    className: 'edit-marker',
+                    html: `<div style="width:${size}px;height:${size}px;background:${bgColor};border:2px solid #fff;border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>`,
+                    iconSize: [size, size],
+                    iconAnchor: [offset, offset]
+                });
+
+                const marker = L.marker([v.lat, v.lng], {
+                    icon: icon,
+                    draggable: true,
+                    zIndexOffset: isSelected ? 1000 : 0
                 }).addTo(map);
 
-                // Make draggable using mouse + touch events
-                let isDragging = false;
-
-                function startDrag(e) {
-                    isDragging = true;
-                    map.dragging.disable();
-                    if (e.originalEvent) e.originalEvent.preventDefault();
-                    L.DomEvent.stopPropagation(e);
-                }
-                function onDragMove(ev) {
-                    if (!isDragging) return;
-                    let latlng;
-                    if (ev.latlng) {
-                        latlng = ev.latlng;
-                    } else if (ev.touches && ev.touches.length > 0) {
-                        const touch = ev.touches[0];
-                        const pt = map.containerPointToLatLng(L.point(touch.clientX - map.getContainer().getBoundingClientRect().left, touch.clientY - map.getContainer().getBoundingClientRect().top));
-                        latlng = pt;
-                    }
-                    if (!latlng) return;
-                    marker.setLatLng(latlng);
+                marker.on('drag', function () {
+                    const latlng = marker.getLatLng();
                     editVertices[i] = { lat: latlng.lat, lng: latlng.lng };
                     renderEditPolygon();
                     updateEditInfo();
-                }
-                function endDrag() {
-                    isDragging = false;
-                    map.dragging.enable();
-                    map.off('mousemove', onDragMove);
-                    map.off('mouseup', endDrag);
-                    document.removeEventListener('touchmove', onDragMove);
-                    document.removeEventListener('touchend', endDrag);
-                }
-
-                marker.on('mousedown', function (e) {
-                    startDrag(e);
-                    map.on('mousemove', onDragMove);
-                    map.on('mouseup', endDrag);
                 });
 
-                // Touch support
-                marker.on('touchstart', function (e) {
-                    startDrag(e);
-                    document.addEventListener('touchmove', onDragMove, { passive: false });
-                    document.addEventListener('touchend', endDrag);
+                marker.on('dragend', function () {
+                    const newVertices = subdivideLongSegments(editVertices, 40); // 40m auto-subdivide
+                    if (newVertices.length !== editVertices.length) {
+                        editVertices = newVertices;
+                        if (editSelectedIdx !== -1) {
+                            editSelectedIdx = -1; // Deselect safely
+                            document.getElementById('btn-delete-pt').disabled = true;
+                        }
+                        renderEditMarkers();
+                        renderEditPolygon();
+                        updateEditInfo();
+                    }
                 });
 
-                // Click to select
                 marker.on('click', function (e) {
                     L.DomEvent.stopPropagation(e);
                     if (editSelectedIdx === i) {
@@ -2865,7 +3115,13 @@
                         localStorage.setItem('auth_name', userName);
                         
                         document.getElementById('login-screen').style.display = 'none';
-                        document.getElementById('btn-mode-admin').style.display = 'none';
+                        
+                        // If Admin, show the "Invite Users" menu item
+                        if (userEmail === ADMIN_EMAIL.toLowerCase()) {
+                            const adminMenu = document.getElementById('menu-item-admin');
+                            if (adminMenu) adminMenu.style.display = 'block';
+                        }
+                        
                         init();
                         loadBreaks();
                     } else {
@@ -2881,7 +3137,8 @@
                         localStorage.setItem('auth_email', userEmail);
                         localStorage.setItem('auth_name', "Admin");
                         document.getElementById('login-screen').style.display = 'none';
-                        document.getElementById('btn-mode-admin').style.display = 'none';
+                        const adminMenu = document.getElementById('menu-item-admin');
+                        if (adminMenu) adminMenu.style.display = 'block';
                         init();
                         loadBreaks();
                     } else {
@@ -2893,24 +3150,6 @@
             });
         };
 
-        function showUnauthorized(email) {
-            document.querySelector('.g_id_signin').classList.add('hidden');
-            document.getElementById('unauth-msg').classList.remove('hidden');
-            document.getElementById('debug-email').innerText = `Email: ${email}`;
-            
-            // Re-render the request access link dynamically so it uses the right email
-            const requestBtn = document.getElementById('request-access-btn');
-            if(requestBtn) {
-                requestBtn.href = `mailto:${ADMIN_EMAIL}?subject=Farm App Access Request&body=Hi, please grant access to the River Terrace Farm App for my email: ${email}`;
-            }
-        }
-        
-        function logout() {
-            localStorage.removeItem('auth_email');
-            localStorage.removeItem('auth_name');
-            window.location.reload();
-        }
-
         // Auto-Login Check on Boot
         window.addEventListener('DOMContentLoaded', () => {
             const savedEmail = localStorage.getItem('auth_email');
@@ -2919,12 +3158,92 @@
                 handleCredentialResponse(savedEmail);
             }
         });
-        
-        // Register Service Worker for PWA
-        if ('serviceWorker' in navigator) {
+
+        function showUnauthorized(email) {
+            document.querySelector('.g_id_signin').classList.add('hidden');
+            document.getElementById('unauth-msg').classList.remove('hidden');
+            document.getElementById('unauth-msg').innerHTML = `
+                <p style="font-weight:bold;">Not Authorized</p>
+                <p style="font-size:14px; margin-bottom: 5px;">Email: ${email}</p>
+                <p style="font-size:12px; margin-bottom: 5px;">This account is not on the authorized list.</p>
+                <a href="mailto:${ADMIN_EMAIL}?subject=Farm App Access Request&body=Hi, please grant access to the River Terrace Farm App for my email: ${email}" class="btn-request-access" target="_blank">Request Access</a>
+            `;
+        }
+
+        /* ===================== ADMIN INVITE LOGIC ===================== */
+        async function loadAuthorizedEmails() {
+            const listDiv = document.getElementById('auth-email-list');
+            listDiv.innerHTML = '<p style="font-size:12px; color:#999;">Loading authorized users...</p>';
+
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL + '?type=auth_list&_t=' + Date.now());
+                const data = await res.json();
+                const emails = data.emails || [];
+
+                listDiv.innerHTML = '';
+                emails.forEach(email => {
+                    const row = document.createElement('div');
+                    row.style = "display:flex; justify-content:space-between; align-items:center; background:white; padding:10px; border-radius:6px; border:1px solid #eee; font-size:13px;";
+                    row.innerHTML = `
+                            <span>${email}</span>
+                            ${email !== ADMIN_EMAIL ? `<button onclick="removeAuthorizedEmail('${email}')" style="background:none; border:none; color:#e74c3c; cursor:pointer; font-weight:bold;">✕</button>` : '<span style="font-size:10px; color:#999;">ADMIN</span>'}
+                        `;
+                    listDiv.appendChild(row);
+                });
+            } catch (e) {
+                listDiv.innerHTML = '<p style="color:red; font-size:12px;">Failed to load users.</p>';
+            }
+        }
+
+        async function addAuthorizedEmail() {
+            const input = document.getElementById('invite-email');
+            const email = input.value.trim().toLowerCase();
+            if (!email || !email.includes('@')) return alert('Enter a valid email');
+
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ type: 'add_auth', email: email })
+                });
+                input.value = '';
+                loadAuthorizedEmails();
+            } catch (e) { alert('Failed to add email'); }
+        }
+
+        async function removeAuthorizedEmail(email) {
+            if (!confirm(`Remove access for ${email}?`)) return;
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ type: 'remove_auth', email: email })
+                });
+                loadAuthorizedEmails();
+            } catch (e) { alert('Failed to remove email'); }
+        }
+            // Register Service Worker for PWA
+            if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
         }
     </script>
+
+    <!-- Break Drawing Toolbar (Moved Outside Map for Z-Index Stability) -->
+    <div id="break-toolbar" class="break-toolbar" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+        <span class="vertex-count" id="vertex-count">0 points</span>
+        <button class="btn-undo" onclick="event.stopPropagation(); undoLastVertex()">↩ Undo</button>
+        <button class="btn-done" id="btn-follow-contour" style="background:#2ecc71; color:white; display:none;" onclick="followPaddockContour()">⬡ Follow Contour</button>
+        <button class="btn-finish" id="btn-finish-break" onclick="event.stopPropagation(); finishBreak()" disabled>✓ Finish</button>
+        <button class="btn-cancel" onclick="event.stopPropagation(); cancelBreak()">✕ Cancel</button>
+    </div>
+
+    <!-- Break Edit Toolbar -->
+    <div id="edit-toolbar" class="break-toolbar" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+        <span class="vertex-count" id="edit-vertex-info">Editing</span>
+        <button class="btn-delete-pt" id="btn-delete-pt" onclick="event.stopPropagation(); deleteEditVertex()" disabled>✕ Delete Point</button>
+        <button class="btn-done" onclick="event.stopPropagation(); finishEditBreak()">✓ Done</button>
+        <button class="btn-cancel" onclick="event.stopPropagation(); cancelEditBreak()">✕ Cancel</button>
+    </div>
+
 </body>
 
 </html>
+```
