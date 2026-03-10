@@ -1799,10 +1799,42 @@
                 document.getElementById('inp-actual-pre').value = data.pre;
                 localStorage.setItem('feed_actual_pre', data.pre);
             }
+            if (data.freq) {
+                document.querySelector(`input[name="milking_freq"][value="${data.freq}"]`).checked = true;
+                localStorage.setItem('feed_freq', data.freq);
+            }
+            if (data.amPct) {
+                document.getElementById('inp-am-pct').value = data.amPct;
+                localStorage.setItem('feed_am_pct', data.amPct);
+            }
+            if (data.pmPct) {
+                document.getElementById('inp-pm-pct').value = data.pmPct;
+                localStorage.setItem('feed_pm_pct', data.pmPct);
+            }
+            if (data.longPct) {
+                document.getElementById('inp-long-pct').value = data.longPct;
+                localStorage.setItem('feed_long_pct', data.longPct);
+            }
+            if (data.shortPct) {
+                document.getElementById('inp-short-pct').value = data.shortPct;
+                localStorage.setItem('feed_short_pct', data.shortPct);
+            }
+            if (data.cropYield) {
+                document.getElementById('inp-crop-yield').value = data.cropYield;
+                localStorage.setItem('feed_crop_yield', data.cropYield);
+            }
+            if (data.cropFeed) {
+                document.getElementById('inp-crop-feed').value = data.cropFeed;
+                localStorage.setItem('feed_crop_feed', data.cropFeed);
+            }
             if (data.herdCows) {
                 localStorage.setItem('herd_cow_numbers', JSON.stringify(data.herdCows));
-                loadLocalFeedSettings();
             }
+            if (data.cropHerds) {
+                localStorage.setItem('herd_in_crops', JSON.stringify(data.cropHerds));
+            }
+            // Always reload the UI after settings are injected
+            loadLocalFeedSettings();
         }
 
         function loadLocalFeedSettings() {
@@ -1949,7 +1981,37 @@
                 if (window.innerWidth <= 768) {
                     document.getElementById('sidebar').style.height = 'auto'; // Shrink sidebar to header only
                 }
-                calculateFeedLogic();
+
+                const msg = document.getElementById('save-msg');
+                if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.length > 5) {
+                    if (msg) {
+                        msg.innerText = "Syncing from Cloud...";
+                        msg.style.display = 'inline-block';
+                    }
+                    fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now(), { cache: 'no-store' })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data) {
+                                setFeedInputs(data);
+                                if (msg) {
+                                    msg.innerText = "Synced!";
+                                    setTimeout(() => msg.style.display = 'none', 2000);
+                                }
+                            }
+                            calculateFeedLogic();
+                        })
+                        .catch(e => {
+                            console.log("Cloud load failed on tab switch, using local");
+                            if (msg) {
+                                msg.innerText = "Sync failed (Offline)";
+                                setTimeout(() => msg.style.display = 'none', 3000);
+                            }
+                            calculateFeedLogic();
+                        });
+                } else {
+                    calculateFeedLogic();
+                }
+
             } else {
                 document.getElementById('map').style.display = 'block';
                 document.getElementById('list').style.display = 'block';
