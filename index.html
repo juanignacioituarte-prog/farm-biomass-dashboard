@@ -1413,8 +1413,7 @@
             { id: '1st', name: '1st Herd', color: '#3498db' },
             { id: '2nd', name: '2nd Herd', color: '#2ecc71' },
             { id: '3rd', name: '3rd Herd', color: '#f39c12' },
-            { id: 'pennos', name: 'Pennos', color: '#e74c3c' },
-            { id: 'crops', name: 'Crops', color: '#d35400' }
+            { id: 'pennos', name: 'Pennos', color: '#e74c3c' }
         ];
         let activeBreakGroup = 'all';
 
@@ -1433,6 +1432,7 @@
 
         let savedBreaks = [];
         let isDrawingBreak = false;
+        let currentDrawingMode = 'polygon';
         let drawingVertices = [];
         let drawingMarkers = [];
         let drawingPolyline = null;
@@ -2381,19 +2381,17 @@
             }
         }
 
-        function redrawDrawingLayers() {
-            if (drawingPolyline) map.removeLayer(drawingPolyline);
-            if (drawingPolygon) map.removeLayer(drawingPolygon);
-            const gColor = getGroupColor(activeBreakGroup);
+         function redrawDrawingLayers() {
+            if (drawingPolyline) { map.removeLayer(drawingPolyline); drawingPolyline = null; }
+            if (drawingPolygon) { map.removeLayer(drawingPolygon); drawingPolygon = null; }
+
             const coords = drawingVertices.map(v => [v.lat, v.lng]);
-            const isCrop = activeBreakGroup === 'crops';
-            const isLineMode = isCrop && cropMeasurementMode === 'line';
-            
-            if (drawingVertices.length >= 2) {
-                drawingPolyline = L.polyline(coords, { color: gColor, weight: isLineMode ? 4 : 2, dashArray: isLineMode ? '' : '6, 4', opacity: 0.9 }).addTo(map);
+            const gColor = getGroupColor(activeBreakGroup);
+            if (coords.length > 1) {
+                drawingPolyline = L.polyline(coords, { color: gColor, weight: 3, dashArray: '5, 5' }).addTo(map);
             }
-            if (drawingVertices.length >= 3 && !isLineMode) {
-                drawingPolygon = L.polygon(coords, { color: gColor, weight: 2, fillColor: gColor, fillOpacity: 0.15, dashArray: '6, 4' }).addTo(map);
+            if (coords.length >= 3 && currentDrawingMode === 'polygon') {
+                drawingPolygon = L.polygon(coords, { color: gColor, weight: 1, fillColor: gColor, fillOpacity: 0.15 }).addTo(map);
             }
         }
 
@@ -2411,8 +2409,7 @@
         function updateVertexCount() {
             const count = drawingVertices.length;
             let info = `${count} point${count !== 1 ? 's' : ''}`;
-            const isCrop = activeBreakGroup === 'crops';
-            const isLineMode = isCrop && cropMeasurementMode === 'line';
+            const isLineMode = currentDrawingMode === 'line';
             
             if (count >= 2 && isLineMode) {
                 const distMeters = calculateLineDistance(drawingVertices);
@@ -2551,6 +2548,7 @@
             const cropFeed = safeNum(document.getElementById('inp-crop-feed').value);
             const cropHerds = JSON.parse(localStorage.getItem('herd_in_crops') || '[]');
             let cropHtml = '';
+            let herdCropM2Map = {};
 
             BREAK_GROUPS.forEach(g => {
                 if (g.id === 'all') return;
@@ -2583,12 +2581,15 @@
                         const hDemand = cropFeed * hCows;
                         cAreaM2 = (hDemand / cropYield) * 10000;
                     }
+                    herdCropM2Map[g.id] = cAreaM2;
                     cropHtml += `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #eee;">
                         <span style="font-weight:bold; color:${g.color}; font-size:12px;">${g.name}</span>
                         <span style="font-size:14px; font-weight:bold;">${Math.round(cAreaM2)} <span style="font-size:11px; font-weight:normal; color:#95a5a6;">m²/day</span></span>
                     </div>`;
                 }
             });
+            
+            localStorage.setItem('feed_crop_m2_per_herd', JSON.stringify(herdCropM2Map));
 
             document.getElementById('grass-herd-outputs').innerHTML = grassHtml || '<div class="muted" style="font-size:11px; text-align:center;">No cows allocated to herds.</div>';
             document.getElementById('crop-herd-outputs').innerHTML = cropHtml || '<div class="muted" style="font-size:11px; text-align:center;">No herds ticked for crops.</div>';
@@ -2851,9 +2852,10 @@
             updateVertexCount();
         }
 
-        function startDrawingBreak() {
+        function startDrawingBreak(mode) {
             if (isDrawingBreak) return;
             isDrawingBreak = true;
+            currentDrawingMode = mode || 'polygon';
             drawingVertices = [];
             drawingMarkers = [];
             drawingPolyline = null;
@@ -2880,8 +2882,7 @@
         }
 
         function finishBreak() {
-            const isCrop = activeBreakGroup === 'crops';
-            const isLineMode = isCrop && cropMeasurementMode === 'line';
+            const isLineMode = currentDrawingMode === 'line';
             
             if (!isLineMode && drawingVertices.length < 3) return;
             if (isLineMode && drawingVertices.length < 2) return;
@@ -2896,9 +2897,18 @@
             centerLng /= drawingVertices.length;
             let paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
 
-            let baseName = paddockName ? paddockName : (isLineMode ? 'Crop Line' : (isCrop ? 'Crop Area' : 'Break'));
+            let baseName = paddockName ? paddockName : (isLineMode ? 'Crop Line' : 'Break');
             let breaksInPaddock = savedBreaks.filter(b => b.name && b.name.startsWith(baseName)).length;
             const breakName = paddockName ? `${baseName} ${isLineMode ? 'Line' : 'Break'} ${breaksInPaddock + 1}` : `${isLineMode ? 'Line' : 'Break'} ${savedBreaks.length + 1}`;
+
+            let cropWidthMeters = 0;
+            if (isLineMode) {
+                const herdCropM2Map = JSON.parse(localStorage.getItem('feed_crop_m2_per_herd') || '{}');
+                const reqM2 = herdCropM2Map[activeBreakGroup] || 0;
+                if (distanceMeters > 0) {
+                    cropWidthMeters = reqM2 / distanceMeters;
+                }
+            }
 
             const newBreak = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -2907,7 +2917,8 @@
                 areaSqm: areaSqm,
                 areaHa: areaHa,
                 distanceMeters: distanceMeters,
-                cropMode: isCrop ? cropMeasurementMode : null,
+                cropWidthMeters: cropWidthMeters,
+                cropMode: isLineMode ? 'line' : 'polygon',
                 createdAt: new Date().toISOString(),
                 createdBy: localStorage.getItem('auth_name') || 'Unknown User',
                 group: activeBreakGroup === 'all' ? '1st' : activeBreakGroup
@@ -3106,21 +3117,14 @@
             });
             html += '</div>';
 
-            // Crops Measurement Toggle
-            if (activeBreakGroup === 'crops') {
-                const polyActive = cropMeasurementMode === 'polygon';
-                const lineActive = cropMeasurementMode === 'line';
-                html += `<div style="display:flex; gap:0px; margin-bottom:12px; border-radius:4px; overflow:hidden; border:1px solid #ccc;">
-                    <button style="flex:1; padding:4px; font-size:10px; cursor:pointer; background:${polyActive?'#e67e22':'#fdfdfd'}; color:${polyActive?'#fff':'#666'}; border:none;" onclick="setCropMeasurementMode('polygon')">POLYGON (Area)</button>
-                    <button style="flex:1; padding:4px; font-size:10px; cursor:pointer; background:${lineActive?'#e67e22':'#fdfdfd'}; color:${lineActive?'#fff':'#666'}; border:none;" onclick="setCropMeasurementMode('line')">LINE (Distance)</button>
-                </div>`;
-            }
-
             // Action buttons row
             html += `<div style="display:flex; gap:8px; margin-bottom:10px;">`;
-            html += `<button class="btn-new-break" style="flex:1; margin-bottom:0;" onclick="startDrawingBreak()" ${isDrawingBreak ? 'disabled' : ''}>+ DRAW NEW BREAK</button>`;
+            html += `<button class="btn-new-break" style="flex:1; margin-bottom:0;" onclick="startDrawingBreak('polygon')" ${isDrawingBreak ? 'disabled' : ''}>+ NEW BREAK</button>`;
+            if (activeBreakGroup !== 'all') {
+                html += `<button class="btn-new-break" style="flex:1; margin-bottom:0; background:#d35400; border-color:#d35400;" onclick="startDrawingBreak('line')" ${isDrawingBreak ? 'disabled' : ''}>+ CROP LINE</button>`;
+            }
             if (count > 0) {
-                html += `<button class="btn-select-breaks ${breakSelectMode ? 'active' : ''}" onclick="toggleBreakSelectMode()">${breakSelectMode ? '\u2715 CANCEL' : '\u2610 SELECT'}</button>`;
+                html += `<button class="btn-select-breaks ${breakSelectMode ? 'active' : ''}" style="flex:0.6;" onclick="toggleBreakSelectMode()">${breakSelectMode ? '\u2715 CANCEL' : '\u2610 SELECT'}</button>`;
             }
             html += `</div>`;
 
@@ -3135,8 +3139,7 @@
                 html += `<div class="break-empty"><span class="break-empty-icon">\ud83d\udcd0</span>No recent breaks created (last 7 days).<br>Click the button above to draw your first break on the map.</div>`;
             }
             [...recentBreaksGroup].reverse().forEach(brk => {
-                const isCrop = brk.group === 'crops';
-                const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+                const isLineMode = brk.cropMode === 'line';
                 
                 const measureStr = isLineMode 
                     ? (brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' meters' : '0 meters')
@@ -3149,6 +3152,41 @@
                     ? `toggleBreakSelection('${brk.id}', event)`
                     : `focusBreakOnMap('${brk.id}'); document.querySelectorAll('.break-card').forEach(c=>c.classList.remove('active')); this.classList.add('active');`;
                 const gColor = getGroupColor(brk.group);
+
+                let secondaryMetricHtml = '';
+                if (isLineMode) {
+                    const wid = brk.cropWidthMeters || 0;
+                    secondaryMetricHtml = `
+                        <span class="label">REQ. FENCE WIDTH</span>
+                        <div style="font-size:13px; font-weight:600; color:#d35400;">${wid > 0 ? wid.toFixed(1) + ' m' : '--'}</div>
+                        <div style="font-size:10px; color:#95a5a6; margin-top:2px;">calculated</div>`;
+                } else {
+                    secondaryMetricHtml = `
+                        <span class="label">EST. KG/COW</span>
+                        <div style="font-size:13px; font-weight:600; color:var(--accent);">
+                            ${(() => {
+                                const paddockName = brk.paddock || "";
+                                const p = manualModeData.find(pd => pd.name === paddockName);
+                                if (p && p.latest) {
+                                    const dataTs = p.latest.ts || selectedSceneTs;
+                                    const daysSince = dataTs ? Math.floor((Date.now() - dataTs) / 86400000) : 0;
+                                    const grower = farmGrowthRate || 0;
+                                    const estimatedCover = (parseFloat(p.latest.cover) || 0) + (grower * daysSince);
+                                    const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
+                                    const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+                                    const cowNum = savedHerdCows[brk.group] || 0;
+                                    if (cowNum > 0) {
+                                        const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
+                                        return (totalKg / cowNum).toFixed(1) + ' kg';
+                                    }
+                                }
+                                return '--';
+                            })()}
+                        </div>
+                        <div style="font-size:10px; color:#95a5a6; margin-top:2px;">per cow</div>`;
+                }
+
+
                 html += `<div class="break-card ${isSelected ? 'selected' : ''}" id="break-${brk.id}" onclick="${cardClick}" style="border-left: 4px solid ${gColor};">
                         ${breakSelectMode
                         ? `<input type="checkbox" class="break-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleBreakSelection('${brk.id}', event)" style="position:absolute; top:14px; right:10px;" />`
@@ -3159,34 +3197,12 @@
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
                             <div>
-                                <span class="label">${isLineMode ? 'LENGTH' : 'AREA'}</span>
+                                <span class="label">${isLineMode ? 'FACE LENGTH' : 'AREA'}</span>
                                 <span class="break-area-val">${measureStr}</span>
                                 ${isLineMode ? '' : (brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`)}
                             </div>
                             <div>
-                                <span class="label">EST. KG/COW</span>
-                                <div style="font-size:13px; font-weight:600; color:var(--accent);">
-                                    ${(() => {
-                                        if (isCrop) return '--';
-                                        const paddockName = brk.paddock || "";
-                                        const p = manualModeData.find(pd => pd.name === paddockName);
-                                        if (p && p.latest) {
-                                            const dataTs = p.latest.ts || selectedSceneTs;
-                                            const daysSince = dataTs ? Math.floor((Date.now() - dataTs) / 86400000) : 0;
-                                            const grower = farmGrowthRate || 0;
-                                            const estimatedCover = (parseFloat(p.latest.cover) || 0) + (grower * daysSince);
-                                            const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
-                                            const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
-                                            const cowNum = savedHerdCows[brk.group] || 0;
-                                            if (cowNum > 0) {
-                                                const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
-                                                return (totalKg / cowNum).toFixed(1) + ' kg';
-                                            }
-                                        }
-                                        return '--';
-                                    })()}
-                                </div>
-                                <div style="font-size:10px; color:#95a5a6; margin-top:2px;">per cow</div>
+                                ${secondaryMetricHtml}
                             </div>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
@@ -3233,8 +3249,7 @@
             if (editPolygon) map.removeLayer(editPolygon);
             const brk = savedBreaks.find(b => b.id === editingBreakId);
             const gColor = brk ? getGroupColor(brk.group) : '#e67e22';
-            const isCrop = brk ? brk.group === 'crops' : false;
-            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+            const isLineMode = brk ? brk.cropMode === 'line' : false;
 
             if (editVertices.length >= 3 && !isLineMode) {
                 const coords = editVertices.map(v => [v.lat, v.lng]);
@@ -3311,8 +3326,7 @@
         function updateEditInfo() {
             let info = `${editVertices.length} points`;
             const brk = savedBreaks.find(b => b.id === editingBreakId);
-            const isCrop = brk ? brk.group === 'crops' : false;
-            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+            const isLineMode = brk ? brk.cropMode === 'line' : false;
 
             if (isLineMode && editVertices.length >= 2) {
                 const distMeters = calculateLineDistance(editVertices);
@@ -3328,8 +3342,7 @@
         function deleteEditVertex() {
             if (editSelectedIdx < 0 || editSelectedIdx >= editVertices.length) return;
             const brk = savedBreaks.find(b => b.id === editingBreakId);
-            const isCrop = brk ? brk.group === 'crops' : false;
-            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+            const isLineMode = brk ? brk.cropMode === 'line' : false;
             
             if (!isLineMode && editVertices.length <= 3) {
                 alert('A break must have at least 3 points.');
@@ -3353,8 +3366,7 @@
             const brk = savedBreaks.find(b => b.id === editingBreakId);
             if (!brk) return;
             
-            const isCrop = brk.group === 'crops';
-            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+            const isLineMode = brk.cropMode === 'line';
             
             if (!isLineMode && editVertices.length < 3) return;
             if (isLineMode && editVertices.length < 2) return;
@@ -3363,6 +3375,12 @@
             brk.areaSqm = isLineMode ? 0 : calculatePolygonArea(brk.vertices);
             brk.areaHa = isLineMode ? 0 : brk.areaSqm / 10000;
             brk.distanceMeters = isLineMode ? calculateLineDistance(brk.vertices) : 0;
+            
+            if (isLineMode) {
+                const herdCropM2Map = JSON.parse(localStorage.getItem('feed_crop_m2_per_herd') || '{}');
+                const reqM2 = herdCropM2Map[brk.group] || 0;
+                brk.cropWidthMeters = (brk.distanceMeters > 0) ? (reqM2 / brk.distanceMeters) : 0;
+            }
             saveBreaks();
             
             cleanupEdit();
