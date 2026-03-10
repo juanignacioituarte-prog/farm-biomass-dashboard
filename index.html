@@ -2290,18 +2290,36 @@
             if (drawingPolygon) map.removeLayer(drawingPolygon);
             const gColor = getGroupColor(activeBreakGroup);
             const coords = drawingVertices.map(v => [v.lat, v.lng]);
+            const isCrop = activeBreakGroup === 'crops';
             if (drawingVertices.length >= 2) {
-                drawingPolyline = L.polyline(coords, { color: gColor, weight: 2, dashArray: '6, 4', opacity: 0.8 }).addTo(map);
+                drawingPolyline = L.polyline(coords, { color: gColor, weight: isCrop ? 4 : 2, dashArray: isCrop ? '' : '6, 4', opacity: 0.9 }).addTo(map);
             }
-            if (drawingVertices.length >= 3) {
+            if (drawingVertices.length >= 3 && !isCrop) {
                 drawingPolygon = L.polygon(coords, { color: gColor, weight: 2, fillColor: gColor, fillOpacity: 0.15, dashArray: '6, 4' }).addTo(map);
             }
+        }
+
+        function calculateLineDistance(vertices) {
+            if (vertices.length < 2) return 0;
+            let dist = 0;
+            for (let i = 0; i < vertices.length - 1; i++) {
+                const p1 = L.latLng(vertices[i].lat, vertices[i].lng);
+                const p2 = L.latLng(vertices[i + 1].lat, vertices[i + 1].lng);
+                dist += p1.distanceTo(p2);
+            }
+            return dist;
         }
 
         function updateVertexCount() {
             const count = drawingVertices.length;
             let info = `${count} point${count !== 1 ? 's' : ''}`;
-            if (count >= 3) {
+            const isCrop = activeBreakGroup === 'crops';
+            
+            if (count >= 2 && isCrop) {
+                const distMeters = calculateLineDistance(drawingVertices);
+                info += ` \u00b7 ${distMeters.toFixed(0)} meters`;
+                document.getElementById('btn-finish-break').disabled = false;
+            } else if (count >= 3 && !isCrop) {
                 const areaSqm = calculatePolygonArea(drawingVertices);
                 const areaHa = areaSqm / 10000;
                 info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
@@ -2645,9 +2663,13 @@
         }
 
         function finishBreak() {
-            if (drawingVertices.length < 3) return;
-            const areaSqm = calculatePolygonArea(drawingVertices);
-            const areaHa = areaSqm / 10000;
+            const isCrop = activeBreakGroup === 'crops';
+            if (!isCrop && drawingVertices.length < 3) return;
+            if (isCrop && drawingVertices.length < 2) return;
+            
+            const areaSqm = isCrop ? 0 : calculatePolygonArea(drawingVertices);
+            const areaHa = isCrop ? 0 : areaSqm / 10000;
+            const distanceMeters = isCrop ? calculateLineDistance(drawingVertices) : 0;
 
             let centerLat = 0, centerLng = 0;
             drawingVertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
@@ -2655,9 +2677,9 @@
             centerLng /= drawingVertices.length;
             let paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
 
-            let baseName = paddockName ? paddockName : 'Break';
+            let baseName = paddockName ? paddockName : (isCrop ? 'Crop Line' : 'Break');
             let breaksInPaddock = savedBreaks.filter(b => b.name && b.name.startsWith(baseName)).length;
-            const breakName = paddockName ? `${baseName} Break ${breaksInPaddock + 1}` : `Break ${savedBreaks.length + 1}`;
+            const breakName = paddockName ? `${baseName} ${isCrop ? 'Line' : 'Break'} ${breaksInPaddock + 1}` : `${isCrop ? 'Line' : 'Break'} ${savedBreaks.length + 1}`;
 
             const newBreak = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -2665,6 +2687,7 @@
                 vertices: [...drawingVertices],
                 areaSqm: areaSqm,
                 areaHa: areaHa,
+                distanceMeters: distanceMeters,
                 createdAt: new Date().toISOString(),
                 createdBy: localStorage.getItem('auth_name') || 'Unknown User',
                 group: activeBreakGroup === 'all' ? '1st' : activeBreakGroup
@@ -2735,15 +2758,28 @@
                 }
                 const coords = brk.vertices.map(v => [v.lat, v.lng]);
                 const gColor = getGroupColor(brk.group);
-                const polygon = L.polygon(coords, {
-                    color: gColor, weight: 2.5, fillColor: gColor,
-                    fillOpacity: 0.2, opacity: 0.9
-                }).addTo(map);
-                const areaStr = brk.areaHa >= 1 ? (brk.areaHa.toFixed(2) + ' ha') : (Math.round(brk.areaSqm) + ' m\u00b2');
-                polygon.bindTooltip(`<div style="font-weight:bold; font-size:12px;">${brk.name}</div><div style="font-size:11px; color:${gColor};">${areaStr}</div>`, {
+                const isCrop = brk.group === 'crops';
+                
+                let renderLayer;
+                let measureStr;
+                
+                if (isCrop) {
+                    renderLayer = L.polyline(coords, {
+                        color: gColor, weight: 4, opacity: 0.9
+                    }).addTo(map);
+                    measureStr = brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' m' : '0 m';
+                } else {
+                    renderLayer = L.polygon(coords, {
+                        color: gColor, weight: 2.5, fillColor: gColor,
+                        fillOpacity: 0.2, opacity: 0.9
+                    }).addTo(map);
+                    measureStr = brk.areaHa >= 1 ? (brk.areaHa.toFixed(2) + ' ha') : (Math.round(brk.areaSqm) + ' m\u00b2');
+                }
+
+                renderLayer.bindTooltip(`<div style="font-weight:bold; font-size:12px;">${brk.name}</div><div style="font-size:11px; color:${gColor};">${measureStr}</div>`, {
                     permanent: false, direction: 'center', className: 'paddock-label show-label'
                 });
-                breakLayers.push(polygon);
+                breakLayers.push(renderLayer);
             });
         }
 
@@ -2757,9 +2793,19 @@
             } catch (e) { }
             breakLayers.forEach((l, i) => {
                 if (!l) return;
-                l.setStyle({ weight: 2.5, fillOpacity: 0.2, color: getGroupColor(savedBreaks[i].group) });
+                const isCrop = savedBreaks[i].group === 'crops';
+                if (isCrop) {
+                    l.setStyle({ weight: 4, opacity: 0.9, color: getGroupColor(savedBreaks[i].group) });
+                } else {
+                    l.setStyle({ weight: 2.5, fillOpacity: 0.2, color: getGroupColor(savedBreaks[i].group) });
+                }
             });
-            layer.setStyle({ weight: 4, fillOpacity: 0.45, color: getGroupColor(savedBreaks[idx].group) });
+            const isCropTarget = savedBreaks[idx].group === 'crops';
+            if (isCropTarget) {
+                layer.setStyle({ weight: 6, opacity: 1, color: getGroupColor(savedBreaks[idx].group) });
+            } else {
+                layer.setStyle({ weight: 4, fillOpacity: 0.45, color: getGroupColor(savedBreaks[idx].group) });
+            }
             if (layer.bringToFront) layer.bringToFront();
         }
 
@@ -2848,7 +2894,10 @@
                 html += `<div class="break-empty"><span class="break-empty-icon">\ud83d\udcd0</span>No recent breaks created (last 7 days).<br>Click the button above to draw your first break on the map.</div>`;
             }
             [...recentBreaksGroup].reverse().forEach(brk => {
-                const areaStr = brk.areaHa >= 1 ? brk.areaHa.toFixed(2) + ' ha' : Math.round(brk.areaSqm) + ' m\u00b2';
+                const isCrop = brk.group === 'crops';
+                const measureStr = isCrop 
+                    ? (brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' meters' : '0 meters')
+                    : (brk.areaHa >= 1 ? brk.areaHa.toFixed(2) + ' ha' : Math.round(brk.areaSqm) + ' m\u00b2');
                 const created = new Date(brk.createdAt);
                 const dateStr = created.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
                 const timeStr = created.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' });
@@ -2867,14 +2916,15 @@
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
                             <div>
-                                <span class="label">AREA</span>
-                                <span class="break-area-val">${areaStr}</span>
-                                ${brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`}
+                                <span class="label">${isCrop ? 'LENGTH' : 'AREA'}</span>
+                                <span class="break-area-val">${measureStr}</span>
+                                ${isCrop ? '' : (brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`)}
                             </div>
                             <div>
                                 <span class="label">EST. KG/COW</span>
                                 <div style="font-size:13px; font-weight:600; color:var(--accent);">
                                     ${(() => {
+                                        if (isCrop) return '--';
                                         const paddockName = brk.paddock || "";
                                         const p = manualModeData.find(pd => pd.name === paddockName);
                                         if (p && p.latest) {
@@ -2940,8 +2990,9 @@
             if (editPolygon) map.removeLayer(editPolygon);
             const brk = savedBreaks.find(b => b.id === editingBreakId);
             const gColor = brk ? getGroupColor(brk.group) : '#e67e22';
+            const isCrop = brk ? brk.group === 'crops' : false;
 
-            if (editVertices.length >= 3) {
+            if (editVertices.length >= 3 && !isCrop) {
                 const coords = editVertices.map(v => [v.lat, v.lng]);
                 editPolygon = L.polygon(coords, {
                     color: gColor, weight: 2.5, fillColor: gColor,
@@ -2950,7 +3001,7 @@
             } else if (editVertices.length >= 2) {
                 const coords = editVertices.map(v => [v.lat, v.lng]);
                 editPolygon = L.polyline(coords, {
-                    color: gColor, weight: 2.5, dashArray: '6, 4'
+                    color: gColor, weight: isCrop ? 4 : 2.5, dashArray: isCrop ? '' : '6, 4'
                 }).addTo(map);
             }
         }
@@ -3015,7 +3066,13 @@
 
         function updateEditInfo() {
             let info = `${editVertices.length} points`;
-            if (editVertices.length >= 3) {
+            const brk = savedBreaks.find(b => b.id === editingBreakId);
+            const isCrop = brk ? brk.group === 'crops' : false;
+
+            if (isCrop && editVertices.length >= 2) {
+                const distMeters = calculateLineDistance(editVertices);
+                info += ` \u00b7 ${distMeters.toFixed(0)} meters`;
+            } else if (!isCrop && editVertices.length >= 3) {
                 const areaSqm = calculatePolygonArea(editVertices);
                 const areaHa = areaSqm / 10000;
                 info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
@@ -3025,10 +3082,18 @@
 
         function deleteEditVertex() {
             if (editSelectedIdx < 0 || editSelectedIdx >= editVertices.length) return;
-            if (editVertices.length <= 3) {
+            const brk = savedBreaks.find(b => b.id === editingBreakId);
+            const isCrop = brk ? brk.group === 'crops' : false;
+            
+            if (!isCrop && editVertices.length <= 3) {
                 alert('A break must have at least 3 points.');
                 return;
             }
+            if (isCrop && editVertices.length <= 2) {
+                alert('A line must have at least 2 points.');
+                return;
+            }
+            
             editVertices.splice(editSelectedIdx, 1);
             editSelectedIdx = -1;
             document.getElementById('btn-delete-pt').disabled = true;
@@ -3038,14 +3103,20 @@
         }
 
         function finishEditBreak() {
-            if (!editingBreakId || editVertices.length < 3) return;
+            if (!editingBreakId) return;
             const brk = savedBreaks.find(b => b.id === editingBreakId);
-            if (brk) {
-                brk.vertices = editVertices.map(v => ({ lat: v.lat, lng: v.lng }));
-                brk.areaSqm = calculatePolygonArea(brk.vertices);
-                brk.areaHa = brk.areaSqm / 10000;
-                saveBreaks();
-            }
+            if (!brk) return;
+            
+            const isCrop = brk.group === 'crops';
+            if (!isCrop && editVertices.length < 3) return;
+            if (isCrop && editVertices.length < 2) return;
+            
+            brk.vertices = editVertices.map(v => ({ lat: v.lat, lng: v.lng }));
+            brk.areaSqm = isCrop ? 0 : calculatePolygonArea(brk.vertices);
+            brk.areaHa = isCrop ? 0 : brk.areaSqm / 10000;
+            brk.distanceMeters = isCrop ? calculateLineDistance(brk.vertices) : 0;
+            saveBreaks();
+            
             cleanupEdit();
             renderBreaksDashboard();
             renderBreaksOnMap();
