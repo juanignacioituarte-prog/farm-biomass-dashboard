@@ -2291,10 +2291,12 @@
             const gColor = getGroupColor(activeBreakGroup);
             const coords = drawingVertices.map(v => [v.lat, v.lng]);
             const isCrop = activeBreakGroup === 'crops';
+            const isLineMode = isCrop && cropMeasurementMode === 'line';
+            
             if (drawingVertices.length >= 2) {
-                drawingPolyline = L.polyline(coords, { color: gColor, weight: isCrop ? 4 : 2, dashArray: isCrop ? '' : '6, 4', opacity: 0.9 }).addTo(map);
+                drawingPolyline = L.polyline(coords, { color: gColor, weight: isLineMode ? 4 : 2, dashArray: isLineMode ? '' : '6, 4', opacity: 0.9 }).addTo(map);
             }
-            if (drawingVertices.length >= 3 && !isCrop) {
+            if (drawingVertices.length >= 3 && !isLineMode) {
                 drawingPolygon = L.polygon(coords, { color: gColor, weight: 2, fillColor: gColor, fillOpacity: 0.15, dashArray: '6, 4' }).addTo(map);
             }
         }
@@ -2314,12 +2316,13 @@
             const count = drawingVertices.length;
             let info = `${count} point${count !== 1 ? 's' : ''}`;
             const isCrop = activeBreakGroup === 'crops';
+            const isLineMode = isCrop && cropMeasurementMode === 'line';
             
-            if (count >= 2 && isCrop) {
+            if (count >= 2 && isLineMode) {
                 const distMeters = calculateLineDistance(drawingVertices);
                 info += ` \u00b7 ${distMeters.toFixed(0)} meters`;
                 document.getElementById('btn-finish-break').disabled = false;
-            } else if (count >= 3 && !isCrop) {
+            } else if (count >= 3 && !isLineMode) {
                 const areaSqm = calculatePolygonArea(drawingVertices);
                 const areaHa = areaSqm / 10000;
                 info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
@@ -2670,12 +2673,14 @@
 
         function finishBreak() {
             const isCrop = activeBreakGroup === 'crops';
-            if (!isCrop && drawingVertices.length < 3) return;
-            if (isCrop && drawingVertices.length < 2) return;
+            const isLineMode = isCrop && cropMeasurementMode === 'line';
             
-            const areaSqm = isCrop ? 0 : calculatePolygonArea(drawingVertices);
-            const areaHa = isCrop ? 0 : areaSqm / 10000;
-            const distanceMeters = isCrop ? calculateLineDistance(drawingVertices) : 0;
+            if (!isLineMode && drawingVertices.length < 3) return;
+            if (isLineMode && drawingVertices.length < 2) return;
+            
+            const areaSqm = isLineMode ? 0 : calculatePolygonArea(drawingVertices);
+            const areaHa = isLineMode ? 0 : areaSqm / 10000;
+            const distanceMeters = isLineMode ? calculateLineDistance(drawingVertices) : 0;
 
             let centerLat = 0, centerLng = 0;
             drawingVertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
@@ -2683,9 +2688,9 @@
             centerLng /= drawingVertices.length;
             let paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
 
-            let baseName = paddockName ? paddockName : (isCrop ? 'Crop Line' : 'Break');
+            let baseName = paddockName ? paddockName : (isLineMode ? 'Crop Line' : (isCrop ? 'Crop Area' : 'Break'));
             let breaksInPaddock = savedBreaks.filter(b => b.name && b.name.startsWith(baseName)).length;
-            const breakName = paddockName ? `${baseName} ${isCrop ? 'Line' : 'Break'} ${breaksInPaddock + 1}` : `${isCrop ? 'Line' : 'Break'} ${savedBreaks.length + 1}`;
+            const breakName = paddockName ? `${baseName} ${isLineMode ? 'Line' : 'Break'} ${breaksInPaddock + 1}` : `${isLineMode ? 'Line' : 'Break'} ${savedBreaks.length + 1}`;
 
             const newBreak = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -2694,6 +2699,7 @@
                 areaSqm: areaSqm,
                 areaHa: areaHa,
                 distanceMeters: distanceMeters,
+                cropMode: isCrop ? cropMeasurementMode : null,
                 createdAt: new Date().toISOString(),
                 createdBy: localStorage.getItem('auth_name') || 'Unknown User',
                 group: activeBreakGroup === 'all' ? '1st' : activeBreakGroup
@@ -2765,11 +2771,14 @@
                 const coords = brk.vertices.map(v => [v.lat, v.lng]);
                 const gColor = getGroupColor(brk.group);
                 const isCrop = brk.group === 'crops';
+                // If it's a crop, check if it was explicitly saved as a line.
+                // For backwards compatibility before this feature, default old crops to 'line'
+                const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
                 
                 let renderLayer;
                 let measureStr;
                 
-                if (isCrop) {
+                if (isLineMode) {
                     renderLayer = L.polyline(coords, {
                         color: gColor, weight: 4, opacity: 0.9
                     }).addTo(map);
@@ -2799,18 +2808,20 @@
             } catch (e) { }
             breakLayers.forEach((l, i) => {
                 if (!l) return;
-                const isCrop = savedBreaks[i].group === 'crops';
-                if (isCrop) {
-                    l.setStyle({ weight: 4, opacity: 0.9, color: getGroupColor(savedBreaks[i].group) });
+                const brk = savedBreaks[i];
+                const isLineMode = brk.group === 'crops' && (brk.cropMode === 'line' || brk.cropMode == null);
+                if (isLineMode) {
+                    l.setStyle({ weight: 4, opacity: 0.9, color: getGroupColor(brk.group) });
                 } else {
-                    l.setStyle({ weight: 2.5, fillOpacity: 0.2, color: getGroupColor(savedBreaks[i].group) });
+                    l.setStyle({ weight: 2.5, fillOpacity: 0.2, color: getGroupColor(brk.group) });
                 }
             });
-            const isCropTarget = savedBreaks[idx].group === 'crops';
-            if (isCropTarget) {
-                layer.setStyle({ weight: 6, opacity: 1, color: getGroupColor(savedBreaks[idx].group) });
+            const targetBrk = savedBreaks[idx];
+            const isTargetLineMode = targetBrk.group === 'crops' && (targetBrk.cropMode === 'line' || targetBrk.cropMode == null);
+            if (isTargetLineMode) {
+                layer.setStyle({ weight: 6, opacity: 1, color: getGroupColor(targetBrk.group) });
             } else {
-                layer.setStyle({ weight: 4, fillOpacity: 0.45, color: getGroupColor(savedBreaks[idx].group) });
+                layer.setStyle({ weight: 4, fillOpacity: 0.45, color: getGroupColor(targetBrk.group) });
             }
             if (layer.bringToFront) layer.bringToFront();
         }
@@ -2818,6 +2829,12 @@
         function toggleBreakSelectMode() {
             breakSelectMode = !breakSelectMode;
             selectedBreakIds.clear();
+            renderBreaksDashboard();
+        }
+
+        function setCropMeasurementMode(mode) {
+            if (isDrawingBreak) return;
+            cropMeasurementMode = mode;
             renderBreaksDashboard();
         }
 
@@ -2881,6 +2898,16 @@
             });
             html += '</div>';
 
+            // Crops Measurement Toggle
+            if (activeBreakGroup === 'crops') {
+                const polyActive = cropMeasurementMode === 'polygon';
+                const lineActive = cropMeasurementMode === 'line';
+                html += `<div style="display:flex; gap:0px; margin-bottom:12px; border-radius:4px; overflow:hidden; border:1px solid #ccc;">
+                    <button style="flex:1; padding:4px; font-size:10px; cursor:pointer; background:${polyActive?'#e67e22':'#fdfdfd'}; color:${polyActive?'#fff':'#666'}; border:none;" onclick="setCropMeasurementMode('polygon')">POLYGON (Area)</button>
+                    <button style="flex:1; padding:4px; font-size:10px; cursor:pointer; background:${lineActive?'#e67e22':'#fdfdfd'}; color:${lineActive?'#fff':'#666'}; border:none;" onclick="setCropMeasurementMode('line')">LINE (Distance)</button>
+                </div>`;
+            }
+
             // Action buttons row
             html += `<div style="display:flex; gap:8px; margin-bottom:10px;">`;
             html += `<button class="btn-new-break" style="flex:1; margin-bottom:0;" onclick="startDrawingBreak()" ${isDrawingBreak ? 'disabled' : ''}>+ DRAW NEW BREAK</button>`;
@@ -2901,7 +2928,9 @@
             }
             [...recentBreaksGroup].reverse().forEach(brk => {
                 const isCrop = brk.group === 'crops';
-                const measureStr = isCrop 
+                const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+                
+                const measureStr = isLineMode 
                     ? (brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' meters' : '0 meters')
                     : (brk.areaHa >= 1 ? brk.areaHa.toFixed(2) + ' ha' : Math.round(brk.areaSqm) + ' m\u00b2');
                 const created = new Date(brk.createdAt);
@@ -2922,9 +2951,9 @@
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
                             <div>
-                                <span class="label">${isCrop ? 'LENGTH' : 'AREA'}</span>
+                                <span class="label">${isLineMode ? 'LENGTH' : 'AREA'}</span>
                                 <span class="break-area-val">${measureStr}</span>
-                                ${isCrop ? '' : (brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`)}
+                                ${isLineMode ? '' : (brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`)}
                             </div>
                             <div>
                                 <span class="label">EST. KG/COW</span>
@@ -2997,8 +3026,9 @@
             const brk = savedBreaks.find(b => b.id === editingBreakId);
             const gColor = brk ? getGroupColor(brk.group) : '#e67e22';
             const isCrop = brk ? brk.group === 'crops' : false;
+            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
 
-            if (editVertices.length >= 3 && !isCrop) {
+            if (editVertices.length >= 3 && !isLineMode) {
                 const coords = editVertices.map(v => [v.lat, v.lng]);
                 editPolygon = L.polygon(coords, {
                     color: gColor, weight: 2.5, fillColor: gColor,
@@ -3007,7 +3037,7 @@
             } else if (editVertices.length >= 2) {
                 const coords = editVertices.map(v => [v.lat, v.lng]);
                 editPolygon = L.polyline(coords, {
-                    color: gColor, weight: isCrop ? 4 : 2.5, dashArray: isCrop ? '' : '6, 4'
+                    color: gColor, weight: isLineMode ? 4 : 2.5, dashArray: isLineMode ? '' : '6, 4'
                 }).addTo(map);
             }
         }
@@ -3074,11 +3104,12 @@
             let info = `${editVertices.length} points`;
             const brk = savedBreaks.find(b => b.id === editingBreakId);
             const isCrop = brk ? brk.group === 'crops' : false;
+            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
 
-            if (isCrop && editVertices.length >= 2) {
+            if (isLineMode && editVertices.length >= 2) {
                 const distMeters = calculateLineDistance(editVertices);
                 info += ` \u00b7 ${distMeters.toFixed(0)} meters`;
-            } else if (!isCrop && editVertices.length >= 3) {
+            } else if (!isLineMode && editVertices.length >= 3) {
                 const areaSqm = calculatePolygonArea(editVertices);
                 const areaHa = areaSqm / 10000;
                 info += ` \u00b7 ${areaHa < 1 ? areaSqm.toFixed(0) + ' m\u00b2' : areaHa.toFixed(2) + ' ha'}`;
@@ -3090,12 +3121,13 @@
             if (editSelectedIdx < 0 || editSelectedIdx >= editVertices.length) return;
             const brk = savedBreaks.find(b => b.id === editingBreakId);
             const isCrop = brk ? brk.group === 'crops' : false;
+            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
             
-            if (!isCrop && editVertices.length <= 3) {
+            if (!isLineMode && editVertices.length <= 3) {
                 alert('A break must have at least 3 points.');
                 return;
             }
-            if (isCrop && editVertices.length <= 2) {
+            if (isLineMode && editVertices.length <= 2) {
                 alert('A line must have at least 2 points.');
                 return;
             }
@@ -3114,13 +3146,15 @@
             if (!brk) return;
             
             const isCrop = brk.group === 'crops';
-            if (!isCrop && editVertices.length < 3) return;
-            if (isCrop && editVertices.length < 2) return;
+            const isLineMode = isCrop && (brk.cropMode === 'line' || brk.cropMode == null);
+            
+            if (!isLineMode && editVertices.length < 3) return;
+            if (isLineMode && editVertices.length < 2) return;
             
             brk.vertices = editVertices.map(v => ({ lat: v.lat, lng: v.lng }));
-            brk.areaSqm = isCrop ? 0 : calculatePolygonArea(brk.vertices);
-            brk.areaHa = isCrop ? 0 : brk.areaSqm / 10000;
-            brk.distanceMeters = isCrop ? calculateLineDistance(brk.vertices) : 0;
+            brk.areaSqm = isLineMode ? 0 : calculatePolygonArea(brk.vertices);
+            brk.areaHa = isLineMode ? 0 : brk.areaSqm / 10000;
+            brk.distanceMeters = isLineMode ? calculateLineDistance(brk.vertices) : 0;
             saveBreaks();
             
             cleanupEdit();
