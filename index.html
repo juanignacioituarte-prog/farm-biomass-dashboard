@@ -2426,6 +2426,14 @@
         };
 
         /* FEED CALCULATOR LOGIC */
+        let autoSaveTimeout = null;
+        function triggerAutoSave() {
+            if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+            autoSaveTimeout = setTimeout(() => {
+                saveToCloud(true);
+            }, 1500); // 1.5s debounce to avoid spamming the cloud API on rapid input
+        }
+
         function saveAndRecalc() {
             localStorage.setItem('feed_residual', document.getElementById('inp-residual').value);
             localStorage.setItem('feed_cows', document.getElementById('inp-cows').value);
@@ -2475,6 +2483,7 @@
                 localStorage.setItem('herd_in_crops', JSON.stringify(cropHerds));
             }
             calculateFeedLogic();
+            triggerAutoSave();
         }
 
         function calculateFeedLogic() {
@@ -2643,16 +2652,21 @@
             });
         }
 
-        function saveToCloud() {
+        function saveToCloud(isAuto = false) {
             if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.length < 5) {
-                alert("Please set the GOOGLE_SCRIPT_URL variable in the code to enable cloud saving.");
+                if (!isAuto) alert("Please set the GOOGLE_SCRIPT_URL variable in the code to enable cloud saving.");
                 return;
             }
             const btn = document.querySelector('.btn-save');
             const msg = document.getElementById('save-msg');
 
-            btn.disabled = true;
-            btn.innerText = "SAVING...";
+            if (!isAuto && btn) {
+                btn.disabled = true;
+                btn.innerText = "SAVING...";
+            } else if (isAuto && msg) {
+                msg.innerText = "Auto-saving...";
+                msg.style.display = 'inline-block';
+            }
 
             const payload = {
                 residual: document.getElementById('inp-residual').value,
@@ -2660,7 +2674,15 @@
                 intake: document.getElementById('inp-intake').value,
                 round: document.getElementById('inp-round').value,
                 pre: document.getElementById('inp-actual-pre').value,
-                herdCows: JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}')
+                herdCows: JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}'),
+                freq: document.querySelector('input[name="milking_freq"]:checked').value,
+                amPct: document.getElementById('inp-am-pct').value,
+                pmPct: document.getElementById('inp-pm-pct').value,
+                longPct: document.getElementById('inp-long-pct').value,
+                shortPct: document.getElementById('inp-short-pct').value,
+                cropYield: document.getElementById('inp-crop-yield').value,
+                cropFeed: document.getElementById('inp-crop-feed').value,
+                cropHerds: JSON.parse(localStorage.getItem('herd_in_crops') || '[]')
             };
 
             fetch(GOOGLE_SCRIPT_URL, {
@@ -2669,14 +2691,24 @@
             })
                 .then(res => res.json())
                 .then(data => {
-                    btn.disabled = false;
-                    btn.innerText = "SAVE TO CLOUD";
-                    msg.style.display = 'inline-block';
-                    setTimeout(() => msg.style.display = 'none', 3000);
+                    if (!isAuto && btn) {
+                        btn.disabled = false;
+                        btn.innerText = "SAVE TO CLOUD";
+                    }
+                    if (msg) {
+                        msg.innerText = "SAVED TO CLOUD!";
+                        msg.style.display = 'inline-block';
+                        setTimeout(() => msg.style.display = 'none', 3000);
+                    }
                 })
                 .catch(err => {
-                    btn.disabled = false;
-                    btn.innerText = "ERROR";
+                    if (!isAuto && btn) {
+                        btn.disabled = false;
+                        btn.innerText = "ERROR";
+                    } else if (isAuto && msg) {
+                        msg.innerText = "ERROR SAVING";
+                        setTimeout(() => msg.style.display = 'none', 3000);
+                    }
                     console.error(err);
                 });
         }
