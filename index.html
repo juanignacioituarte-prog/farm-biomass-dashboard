@@ -2628,6 +2628,12 @@
                     }
                 });
 
+                marker.on('click', (ev) => {
+                    L.DomEvent.stopPropagation(ev); // Prevent map from catching the click
+                    drawingVertices.splice(idx, 1);
+                    rebuildDrawingMarkers();
+                });
+
                 drawingMarkers.push(marker);
             });
             redrawDrawingLayers();
