@@ -2976,6 +2976,7 @@
             const newBreak = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 name: breakName,
+                paddock: paddockName,
                 vertices: [...drawingVertices],
                 areaSqm: areaSqm,
                 areaHa: areaHa,
@@ -3228,8 +3229,15 @@
                         <span class="label">EST. KG/COW</span>
                         <div style="font-size:13px; font-weight:600; color:var(--accent);">
                             ${(() => {
-                                const paddockName = brk.paddock || "";
-                                const p = satellitePaddockData.find(pd => pd.name === paddockName);
+                                let paddockName = brk.paddock;
+                                if (!paddockName && brk.vertices && brk.vertices.length > 0) {
+                                    let centerLat = 0, centerLng = 0;
+                                    brk.vertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
+                                    centerLat /= brk.vertices.length;
+                                    centerLng /= brk.vertices.length;
+                                    paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
+                                }
+                                const p = satellitePaddockData.find(pd => pd && pd.name === paddockName);
                                 if (p && p.latest) {
                                     const createdTs = new Date(brk.createdAt).getTime();
                                     const dataTs = p.latest.ts || selectedSceneTs;
@@ -3239,6 +3247,9 @@
                                     const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
                                     const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
                                     const cowNum = savedHerdCows[brk.group] || 0;
+
+                                    console.log('Break Math Debug:', { paddockName, hasLatest: !!p.latest, estimatedCover, residual, cowNum, areaHa: brk.areaHa });
+
                                     if (cowNum > 0) {
                                         const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
                                         return (totalKg / cowNum).toFixed(1) + ' kg';
@@ -3440,6 +3451,12 @@
             brk.areaHa = isLineMode ? 0 : brk.areaSqm / 10000;
             brk.distanceMeters = isLineMode ? calculateLineDistance(brk.vertices) : 0;
             
+            let centerLat = 0, centerLng = 0;
+            brk.vertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
+            centerLat /= brk.vertices.length;
+            centerLng /= brk.vertices.length;
+            brk.paddock = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
+
             if (isLineMode) {
                 const herdCropM2Map = JSON.parse(localStorage.getItem('feed_crop_m2_per_herd') || '{}');
                 const reqM2 = herdCropM2Map[brk.group] || 0;
