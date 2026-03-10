@@ -3229,10 +3229,11 @@
                         <div style="font-size:13px; font-weight:600; color:var(--accent);">
                             ${(() => {
                                 const paddockName = brk.paddock || "";
-                                const p = manualModeData.find(pd => pd.name === paddockName);
+                                const p = satellitePaddockData.find(pd => pd.name === paddockName);
                                 if (p && p.latest) {
+                                    const createdTs = new Date(brk.createdAt).getTime();
                                     const dataTs = p.latest.ts || selectedSceneTs;
-                                    const daysSince = dataTs ? Math.floor((Date.now() - dataTs) / 86400000) : 0;
+                                    const daysSince = dataTs ? Math.floor((createdTs - dataTs) / 86400000) : 0;
                                     const grower = farmGrowthRate || 0;
                                     const estimatedCover = (parseFloat(p.latest.cover) || 0) + (grower * daysSince);
                                     const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
