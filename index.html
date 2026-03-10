@@ -1205,9 +1205,69 @@
             </div>
 
             <div class="feed-card">
+                <div class="feed-title">Grass Management</div>
+                
+                <div style="display:flex; gap:15px; margin-bottom:15px; font-size:12px;">
+                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                        <input type="radio" name="milking_freq" id="freq-tad" value="tad" checked onchange="saveAndRecalc()"> Twice a day (TAD)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                        <input type="radio" name="milking_freq" id="freq-3in2" value="3in2" onchange="saveAndRecalc()"> 3 in 2 Milking
+                    </label>
+                </div>
+                
+                <div class="calc-grid" id="freq-inputs-tad">
+                    <div class="input-group">
+                        <label>AM Break %</label>
+                        <input type="number" id="inp-am-pct" value="60" oninput="saveAndRecalc()">
+                    </div>
+                    <div class="input-group">
+                        <label>PM Break %</label>
+                        <input type="number" id="inp-pm-pct" value="40" oninput="saveAndRecalc()">
+                    </div>
+                </div>
+                
+                <div class="calc-grid" id="freq-inputs-3in2" style="display:none;">
+                    <div class="input-group">
+                        <label>Long Break %</label>
+                        <input type="number" id="inp-long-pct" value="40" oninput="saveAndRecalc()">
+                    </div>
+                    <div class="input-group">
+                        <label>Short Break %</label>
+                        <input type="number" id="inp-short-pct" value="20" oninput="saveAndRecalc()">
+                    </div>
+                </div>
+
+                <div id="grass-herd-outputs" style="margin-top:10px;">
+                    <!-- Herd area outputs will be injected here -->
+                </div>
+            </div>
+
+            <div class="feed-card">
                 <div class="feed-title">Herd Management</div>
                 <div class="calc-grid" id="herd-inputs">
                     <!-- Herds will be injected here -->
+                </div>
+            </div>
+
+            <div class="feed-card">
+                <div class="feed-title">Crop Management</div>
+                <div class="calc-grid">
+                    <div class="input-group">
+                        <label>Crop Yield (kgDM/ha)</label>
+                        <input type="number" id="inp-crop-yield" value="20000" oninput="saveAndRecalc()">
+                    </div>
+                    <div class="input-group">
+                        <label>Target Feed (kgDM/cow)</label>
+                        <input type="number" id="inp-crop-feed" value="4" oninput="saveAndRecalc()">
+                    </div>
+                </div>
+                <div style="font-size:12px; font-weight:bold; color:#7f8c8d; margin-top:10px; margin-bottom:5px;">Herds in Crops:</div>
+                <div id="crop-herd-toggles" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px; font-size:12px;">
+                    <!-- checkboxes injected via JS -->
+                </div>
+                <div id="crop-herd-outputs">
+                    <!-- Crop area outputs will be injected here -->
                 </div>
             </div>
 
@@ -1745,19 +1805,44 @@
             if (localStorage.getItem('feed_intake')) document.getElementById('inp-intake').value = localStorage.getItem('feed_intake');
             if (localStorage.getItem('feed_round')) document.getElementById('inp-round').value = localStorage.getItem('feed_round');
             if (localStorage.getItem('feed_actual_pre')) document.getElementById('inp-actual-pre').value = localStorage.getItem('feed_actual_pre');
+            
+            // Grass Management Settings
+            const savedFreq = localStorage.getItem('feed_freq') || 'tad';
+            document.getElementById(savedFreq === '3in2' ? 'freq-3in2' : 'freq-tad').checked = true;
+            if (localStorage.getItem('feed_am_pct')) document.getElementById('inp-am-pct').value = localStorage.getItem('feed_am_pct');
+            if (localStorage.getItem('feed_pm_pct')) document.getElementById('inp-pm-pct').value = localStorage.getItem('feed_pm_pct');
+            if (localStorage.getItem('feed_long_pct')) document.getElementById('inp-long-pct').value = localStorage.getItem('feed_long_pct');
+            if (localStorage.getItem('feed_short_pct')) document.getElementById('inp-short-pct').value = localStorage.getItem('feed_short_pct');
+            
+            // Crop Settings
+            if (localStorage.getItem('feed_crop_yield')) document.getElementById('inp-crop-yield').value = localStorage.getItem('feed_crop_yield');
+            if (localStorage.getItem('feed_crop_feed')) document.getElementById('inp-crop-feed').value = localStorage.getItem('feed_crop_feed');
 
             // Load Herd Inputs
             const herdGrid = document.getElementById('herd-inputs');
-            if (herdGrid) {
+            const cropToggleGrid = document.getElementById('crop-herd-toggles');
+            if (herdGrid && cropToggleGrid) {
                 herdGrid.innerHTML = '';
+                cropToggleGrid.innerHTML = '';
                 const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+                const savedCropHerds = JSON.parse(localStorage.getItem('herd_in_crops') || '[]');
+                
                 BREAK_GROUPS.forEach(g => {
                     if (g.id === 'all') return;
                     const val = savedHerdCows[g.id] || 0;
+                    
+                    // Main Herd Row
                     const div = document.createElement('div');
                     div.className = 'input-group';
                     div.innerHTML = `<label style="color:${g.color}; font-weight:bold;">${g.name}</label><input type="number" id="herd-cows-${g.id}" value="${val}" oninput="saveAndRecalc()">`;
                     herdGrid.appendChild(div);
+                    
+                    // Crop Toggle
+                    const isChecked = savedCropHerds.includes(g.id) ? 'checked' : '';
+                    const toggleDiv = document.createElement('label');
+                    toggleDiv.style.cssText = `display:flex; align-items:center; gap:4px; color:${g.color}; font-weight:bold; cursor:pointer;`;
+                    toggleDiv.innerHTML = `<input type="checkbox" id="crop-toggle-${g.id}" value="${g.id}" ${isChecked} onchange="saveAndRecalc()"> ${g.name}`;
+                    cropToggleGrid.appendChild(toggleDiv);
                 });
             }
             calculateFeedLogic();
@@ -2347,9 +2432,22 @@
             localStorage.setItem('feed_intake', document.getElementById('inp-intake').value);
             localStorage.setItem('feed_round', document.getElementById('inp-round').value);
             localStorage.setItem('feed_actual_pre', document.getElementById('inp-actual-pre').value);
+            
+            // Grass
+            const freq = document.querySelector('input[name="milking_freq"]:checked').value;
+            localStorage.setItem('feed_freq', freq);
+            localStorage.setItem('feed_am_pct', document.getElementById('inp-am-pct').value);
+            localStorage.setItem('feed_pm_pct', document.getElementById('inp-pm-pct').value);
+            localStorage.setItem('feed_long_pct', document.getElementById('inp-long-pct').value);
+            localStorage.setItem('feed_short_pct', document.getElementById('inp-short-pct').value);
+            
+            // Crop
+            localStorage.setItem('feed_crop_yield', document.getElementById('inp-crop-yield').value);
+            localStorage.setItem('feed_crop_feed', document.getElementById('inp-crop-feed').value);
 
             let totalCows = 0;
             const herdCows = {};
+            const cropHerds = [];
             let hasHerdInputs = false;
             BREAK_GROUPS.forEach(g => {
                 if (g.id === 'all') return;
@@ -2359,6 +2457,10 @@
                     const val = parseFloat(el.value) || 0;
                     herdCows[g.id] = val;
                     totalCows += val;
+                }
+                const tg = document.getElementById(`crop-toggle-${g.id}`);
+                if (tg && tg.checked) {
+                    cropHerds.push(g.id);
                 }
             });
             
@@ -2370,6 +2472,7 @@
 
             if (hasHerdInputs) {
                 localStorage.setItem('herd_cow_numbers', JSON.stringify(herdCows));
+                localStorage.setItem('herd_in_crops', JSON.stringify(cropHerds));
             }
             calculateFeedLogic();
         }
@@ -2407,6 +2510,66 @@
                 supp = (preGrazeTarget - actualPre) * areaDay / cows;
             }
             document.getElementById('res-supp').innerText = supp.toFixed(1);
+
+            // ----- GRASS MANAGEMENT HERD CALCULATIONS -----
+            const freq = document.querySelector('input[name="milking_freq"]:checked').value;
+            const amPct = safeNum(document.getElementById('inp-am-pct').value) / 100;
+            const pmPct = safeNum(document.getElementById('inp-pm-pct').value) / 100;
+            const longPct = safeNum(document.getElementById('inp-long-pct').value) / 100;
+            const shortPct = safeNum(document.getElementById('inp-short-pct').value) / 100;
+
+            document.getElementById('freq-inputs-tad').style.display = freq === 'tad' ? 'grid' : 'none';
+            document.getElementById('freq-inputs-3in2').style.display = freq === '3in2' ? 'grid' : 'none';
+
+            let grassHtml = '';
+            const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+            
+            // ----- CROP MANAGEMENT HERD CALCULATIONS -----
+            const cropYield = safeNum(document.getElementById('inp-crop-yield').value);
+            const cropFeed = safeNum(document.getElementById('inp-crop-feed').value);
+            const cropHerds = JSON.parse(localStorage.getItem('herd_in_crops') || '[]');
+            let cropHtml = '';
+
+            BREAK_GROUPS.forEach(g => {
+                if (g.id === 'all') return;
+                const hCows = savedHerdCows[g.id] || 0;
+                if (hCows <= 0) return;
+
+                // Grass Math
+                let hHtml = `<div style="margin-bottom:8px; border-bottom:1px solid #eee; padding-bottom:5px;">
+                    <div style="font-weight:bold; color:${g.color}; margin-bottom:4px;">${g.name} <span style="font-size:10px; color:#95a5a6; font-weight:normal;">(${hCows} cows)</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;">`;
+
+                if (freq === 'tad') {
+                    const hAreaHa = (areaCow * hCows) / 10000;
+                    const amHa = hAreaHa * amPct;
+                    const pmHa = hAreaHa * pmPct;
+                    hHtml += `<div><span>AM:</span> <b>${amHa.toFixed(2)} ha</b></div><div><span>PM:</span> <b>${pmHa.toFixed(2)} ha</b></div>`;
+                } else {
+                    const hArea2Day = ((areaCow * 2) * hCows) / 10000;
+                    const longHa = hArea2Day * longPct;
+                    const shortHa = hArea2Day * shortPct;
+                    hHtml += `<div><span>Long:</span> <b>${longHa.toFixed(2)} ha</b></div><div><span>Short:</span> <b>${shortHa.toFixed(2)} ha</b></div>`;
+                }
+                hHtml += `</div></div>`;
+                grassHtml += hHtml;
+
+                // Crop Math
+                if (cropHerds.includes(g.id)) {
+                    let cAreaM2 = 0;
+                    if (cropYield > 0) {
+                        const hDemand = cropFeed * hCows;
+                        cAreaM2 = (hDemand / cropYield) * 10000;
+                    }
+                    cropHtml += `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #eee;">
+                        <span style="font-weight:bold; color:${g.color}; font-size:12px;">${g.name}</span>
+                        <span style="font-size:14px; font-weight:bold;">${Math.round(cAreaM2)} <span style="font-size:11px; font-weight:normal; color:#95a5a6;">m²/day</span></span>
+                    </div>`;
+                }
+            });
+
+            document.getElementById('grass-herd-outputs').innerHTML = grassHtml || '<div class="muted" style="font-size:11px; text-align:center;">No cows allocated to herds.</div>';
+            document.getElementById('crop-herd-outputs').innerHTML = cropHtml || '<div class="muted" style="font-size:11px; text-align:center;">No herds ticked for crops.</div>';
 
             renderFeedWedge(manualModeData, preGrazeTarget, residual);
         }
