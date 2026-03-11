@@ -2224,7 +2224,7 @@
                 const manual = findBestManualForPaddock(name);
                 return { name, latest, previous, growthRate, area, isOut, reason: excludedPaddocks.get(lowerName), isPartial, manual, mStatus: manual ? manualCalibratorStatus(manual, latest.cover_raw, lowerName) : { ok: false, reason: "", className: "" } };
             });
-            document.getElementById('latest-date').innerText = `LATEST IMAGERY: ${globalLatestDate}`;
+            document.getElementById('latest-date').innerText = `LATEST IMAGERY: ${selectedSceneTs ? fmtNZ(new Date(selectedSceneTs)) : globalLatestDate}`;
 
             const topPaddock = satellitePaddockData.find(p => p.latest.url && p.latest.url.length > 10 && !p.isOut);
             if (topPaddock) updateMapTile(topPaddock.latest.url);
@@ -3034,13 +3034,20 @@
             const brk = savedBreaks.find(b => b.id === breakId);
             if (brk) {
                 brk.comment = comment;
+                brk.lastEditedBy = localStorage.getItem('auth_name') || 'Unknown User';
+                brk.lastEditedAt = new Date().toISOString();
                 saveBreaks();
             }
         }
 
         function renameBreak(breakId, newName) {
             const brk = savedBreaks.find(b => b.id === breakId);
-            if (brk) { brk.name = newName; saveBreaks(); }
+            if (brk) { 
+                brk.name = newName; 
+                brk.lastEditedBy = localStorage.getItem('auth_name') || 'Unknown User';
+                brk.lastEditedAt = new Date().toISOString();
+                saveBreaks(); 
+            }
         }
 
         function renderBreaksOnMap() {
@@ -3240,19 +3247,23 @@
                                 const p = satellitePaddockData.find(pd => pd && pd.name === paddockName);
                                 if (p && p.latest) {
                                     const createdTs = new Date(brk.createdAt).getTime();
-                                    const dataTs = p.latest.ts || selectedSceneTs;
-                                    const daysSince = dataTs ? Math.floor((createdTs - dataTs) / 86400000) : 0;
-                                    const grower = farmGrowthRate || 0;
-                                    const estimatedCover = (parseFloat(p.latest.cover) || 0) + (grower * daysSince);
-                                    const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
-                                    const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
-                                    const cowNum = savedHerdCows[brk.group] || 0;
+                                    // Use the paddock's actual latest image date for accuracy,
+                                    // but fallback to selectedSceneTs (Latest Imagery date) if needed.
+                                    const imgTs = p.latest.dateObj ? p.latest.dateObj.getTime() : selectedSceneTs;
+                                    
+                                    if (imgTs) {
+                                        const daysSince = (createdTs - imgTs) / 86400000;
+                                        const grower = farmGrowthRate || 0;
+                                        // Use float for daysSince to catch partial days of growth
+                                        const estimatedCover = (parseFloat(p.latest.cover) || 0) + (grower * daysSince);
+                                        const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
+                                        const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+                                        const cowNum = savedHerdCows[brk.group] || 0;
 
-                                    console.log('Break Math Debug:', { paddockName, hasLatest: !!p.latest, estimatedCover, residual, cowNum, areaHa: brk.areaHa });
-
-                                    if (cowNum > 0) {
-                                        const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
-                                        return (totalKg / cowNum).toFixed(1) + ' kg';
+                                        if (cowNum > 0) {
+                                            const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
+                                            return (totalKg / cowNum).toFixed(1) + ' kg';
+                                        }
                                     }
                                 }
                                 return '--';
@@ -3282,7 +3293,14 @@
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
                             <input class="break-name-input" type="text" placeholder="Add comment..." value="${brk.comment || ''}" onchange="updateBreakComment('${brk.id}', this.value)" onclick="event.stopPropagation()" style="flex:1; font-size: 11px; font-weight: normal; color: #555; background: #fdfdfd; border: 1px solid #eee; padding: 4px 6px; border-radius:3px;">
-                            <div style="font-size:11px; color:#bbb; margin-left:10px; font-weight:bold;">BY ${brk.createdBy ? brk.createdBy.toUpperCase().split(' ')[0] : '???'}</div>
+                            <div style="font-size:10px; color:#bbb; margin-left:10px; font-weight:bold; text-align:right;">
+                                ${(() => {
+                                    const user = brk.lastEditedBy || brk.createdBy || '???';
+                                    const firstName = user.toUpperCase().split(' ')[0];
+                                    const status = brk.lastEditedBy ? 'EDITED' : 'CREATED';
+                                    return `${firstName} ${status}`;
+                                })()}
+                            </div>
                         </div>
                     </div>`;
             });
@@ -3462,6 +3480,8 @@
                 const reqM2 = herdCropM2Map[brk.group] || 0;
                 brk.cropWidthMeters = (brk.distanceMeters > 0) ? (reqM2 / brk.distanceMeters) : 0;
             }
+            brk.lastEditedBy = localStorage.getItem('auth_name') || 'Unknown User';
+            brk.lastEditedAt = new Date().toISOString();
             saveBreaks();
             
             cleanupEdit();
