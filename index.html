@@ -3250,7 +3250,15 @@
                         
                         if (imgTs) {
                             const daysSince = (createdTs - imgTs) / 86400000;
-                            const grower = farmGrowthRate || 0;
+                            // Calculate Satellite mode GROWTH rate
+                            let tWGrowth = 0, tAreaG = 0;
+                            satellitePaddockData.forEach(sp => {
+                                if (sp.area > 0 && !sp.isOut && sp.growthRate && sp.growthRate > 0) {
+                                    tWGrowth += (sp.growthRate * sp.area);
+                                    tAreaG += sp.area;
+                                }
+                            });
+                            const grower = tAreaG > 0 ? Math.round(tWGrowth / tAreaG) : 0;
                             const baseCover = parseFloat(p.latest.cover) || 0;
                             const estimatedCover = baseCover + (grower * daysSince);
                             const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
