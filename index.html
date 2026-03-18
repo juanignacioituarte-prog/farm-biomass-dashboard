@@ -38,20 +38,23 @@
         }
 
         #map {
-            flex-grow: 1;
+            flex: 1; /* Grow to fill space */
             height: 100%;
             background: #000;
             position: relative;
+            min-width: 0; /* Prevent flex blowout */
         }
 
         #sidebar {
             width: 380px;
+            flex: 0 0 auto; /* Don't grow or shrink */
             background: white;
             border-left: 1px solid #ddd;
             display: flex;
             flex-direction: column;
             box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
             z-index: 1000;
+            transition: width 0.3s ease, height 0.3s ease;
         }
 
         .header {
@@ -937,17 +940,18 @@
             }
 
             #map {
-                flex-grow: 0;
-                height: 45vh;
+                flex: 1; /* Key: grow to fill vertical space */
                 width: 100%;
+                height: var(--sidebar-h, 45vh); /* fallback but flex:1 overrides anyway */
             }
 
             #sidebar {
-                width: 100%;
-                height: 55vh;
+                width: 100% !important;
+                height: var(--sidebar-h, 55vh);
                 border-left: none;
                 border-top: 1px solid #ddd;
                 box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+                flex: 0 0 auto;
             }
 
             .header {
@@ -1128,6 +1132,7 @@
             #sidebar.minimized {
                 height: 0 !important;
                 width: 100% !important;
+                min-height: 0;
             }
             #sidebar.minimized .minimize-btn {
                 bottom: 20px;
@@ -1603,16 +1608,20 @@
             if (window.innerWidth > 768) {
                 btn.innerHTML = isMinimized ? '▶' : '◀';
                 sidebar.style.width = isMinimized ? '40px' : '380px';
+                sidebar.style.height = '100%';
             } else {
                 btn.innerHTML = isMinimized ? '▲' : '▼';
-                const h = isMinimized ? '0' : '55vh';
-                sidebar.style.height = h;
-                document.documentElement.style.setProperty('--sidebar-h', h);
+                const sideH = isMinimized ? '0px' : '55vh';
+                sidebar.style.height = sideH;
+                document.documentElement.style.setProperty('--sidebar-h', sideH);
             }
             
-            setTimeout(() => {
+            // Re-invalidate multiple times during transition for smoothness
+            let count = 0;
+            const iv = setInterval(() => {
                 map.invalidateSize();
-            }, 300);
+                if (++count > 10) clearInterval(iv);
+            }, 50);
         }
 
         function toggleLegend() {
@@ -2116,11 +2125,13 @@
                 const isMinimized = sidebar.classList.contains('minimized');
                 
                 if (window.innerWidth <= 768) {
-                    if (!isMinimized) sidebar.style.height = '55vh';
-                    else sidebar.style.height = '0';
+                    const sideH = isMinimized ? '0px' : '55vh';
+                    sidebar.style.height = sideH;
+                    sidebar.style.width = '100%';
+                    document.documentElement.style.setProperty('--sidebar-h', sideH);
                 } else {
-                    if (!isMinimized) sidebar.style.width = '380px';
-                    else sidebar.style.width = '40px';
+                    sidebar.style.width = isMinimized ? '40px' : '380px';
+                    sidebar.style.height = '100%';
                 }
                 setTimeout(() => map.invalidateSize(), 50);
 
