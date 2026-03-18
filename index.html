@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="icon-512.png">
     <title>River Terrace Farm Monitor Pro | Feed Wedge</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+    <script src="https://unpkg.com/leaflet-rotate@1.2.1/dist/leaflet-rotate.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
@@ -1942,6 +1942,8 @@
                 maxZoom: 20,
                 rotate: true,
                 touchRotate: true,
+                pinchRotate: true,
+                bearing: 0,
                 rotateControl: {
                     closeOnZeroBearing: false
                 }
@@ -2023,8 +2025,8 @@
 
             // UI Toggles
             document.getElementById('calibration-box').style.display = (mode === 'satellite' && calibrationModel) ? 'block' : 'none';
-            document.getElementById('sat-layer-controls').style.display = (mode === 'satellite') ? 'flex' : 'none';
-            document.getElementById('latest-date').style.display = (mode === 'satellite') ? 'block' : 'none';
+            document.getElementById('sat-layer-controls').style.display = (mode === 'satellite' || mode === 'breaks') ? 'flex' : 'none';
+            document.getElementById('latest-date').style.display = (mode === 'satellite' || mode === 'breaks') ? 'block' : 'none';
             document.getElementById('feed-view').style.display = (mode === 'feed') ? 'flex' : 'none';
 
             // Map vs Overlay Logic
@@ -2068,10 +2070,14 @@
             } else {
                 document.getElementById('map').style.display = 'block';
                 document.getElementById('list').style.display = 'block';
+                
+                const sidebar = document.getElementById('sidebar');
                 if (window.innerWidth <= 768) {
-                    document.getElementById('sidebar').style.height = '55vh';
+                    sidebar.style.height = '55vh';
                 } else {
-                    document.getElementById('sidebar').style.width = '380px';
+                    if (!sidebar.classList.contains('minimized')) {
+                        sidebar.style.width = '380px';
+                    }
                 }
                 setTimeout(() => map.invalidateSize(), 50);
 
@@ -2083,7 +2089,7 @@
                     setLayerMode('ndvi');
                     document.getElementById('legend').style.display = 'none';
                 } else if (mode === 'breaks') {
-                    if (ndviLayer) ndviLayer.addTo(map);
+                    setLayerMode(currentViewMode);
                     document.getElementById('legend').style.display = 'none';
                     updateGeoStyles();
                     renderBreaksDashboard();
@@ -2415,7 +2421,9 @@
             document.getElementById('legend').style.display = (mode === 'cover') ? 'block' : 'none';
             
             if (ndviLayer) {
-                if ((mode === 'ndvi' && (currentDashboardMode === 'satellite' || currentDashboardMode === 'breaks')) || currentDashboardMode === 'breaks') {
+                // Only show NDVI if in 'ndvi' mode AND dashboard supports it (satellite or breaks)
+                const shouldShowNDVI = (mode === 'ndvi' && (currentDashboardMode === 'satellite' || currentDashboardMode === 'breaks'));
+                if (shouldShowNDVI) {
                     ndviLayer.addTo(map);
                 } else {
                     map.removeLayer(ndviLayer);
