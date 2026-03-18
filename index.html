@@ -12,7 +12,6 @@
     <link rel="apple-touch-icon" href="icon-512.png">
     <title>River Terrace Farm Monitor Pro | Feed Wedge</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet-rotate@1.2.1/dist/leaflet-rotate.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
@@ -181,7 +180,7 @@
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 1000;
+            z-index: 3000;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
@@ -1087,11 +1086,10 @@
         }
         .minimize-btn {
             position: absolute;
-            top: 50%;
-            left: -20px;
-            transform: translateY(-50%);
-            width: 20px;
-            height: 60px;
+            top: 20px;
+            left: -24px;
+            width: 24px;
+            height: 48px;
             background: white;
             border: 1px solid #ddd;
             border-right: none;
@@ -1102,12 +1100,11 @@
             align-items: center;
             justify-content: center;
             box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+            font-size: 12px;
+            color: #555;
         }
         #sidebar.minimized .minimize-btn {
-            left: 0;
-            border-right: 1px solid #ddd;
-            border-left: none;
-            border-radius: 0 8px 8px 0;
+            left: -24px;
         }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1401,6 +1398,7 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script>
         /* === CONFIGURATION === */
         // Paste your Google Apps Script Web App URL here to enable cloud saving
@@ -1571,7 +1569,17 @@
             sidebar.classList.toggle('minimized');
             const isMinimized = sidebar.classList.contains('minimized');
             btn.innerHTML = isMinimized ? '▶' : '◀';
-            setTimeout(() => map.invalidateSize(), 300);
+            
+            // Adjust header width if needed, or rely on flex
+            if (isMinimized) {
+                sidebar.style.width = '40px';
+            } else {
+                sidebar.style.width = '380px';
+            }
+            
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300);
         }
 
         function toggleLegend() {
