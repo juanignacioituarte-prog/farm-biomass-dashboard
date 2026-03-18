@@ -1079,32 +1079,61 @@
         /* Minimized Sidebar */
         #sidebar.minimized {
             width: 40px !important;
-            overflow: hidden;
+            /* Remove overflow: hidden to let the button be visible */
         }
-        #sidebar.minimized .header, #sidebar.minimized #list, #sidebar.minimized #admin-view {
+        #sidebar.minimized #sidebar-content {
             display: none !important;
         }
         .minimize-btn {
             position: absolute;
             top: 20px;
-            left: -24px;
-            width: 24px;
-            height: 48px;
+            left: -28px; /* Slightly wider button */
+            width: 28px;
+            height: 56px;
             background: white;
             border: 1px solid #ddd;
             border-right: none;
             border-radius: 8px 0 0 8px;
             cursor: pointer;
-            z-index: 2000;
+            z-index: 3001; /* Above EVERYTHING */
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
-            font-size: 12px;
-            color: #555;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+            font-size: 14px;
+            color: var(--accent);
+            font-weight: bold;
         }
         #sidebar.minimized .minimize-btn {
-            left: -24px;
+            left: -28px;
+            border-right: 1px solid #ddd;
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+        }
+
+        /* Mobile Adjustments for Sidebar */
+        @media (max-width: 768px) {
+            .minimize-btn {
+                top: auto;
+                bottom: calc(var(--sidebar-h, 55vh) + 10px);
+                right: 15px;
+                left: auto;
+                width: 40px;
+                height: 40px;
+                border: 1px solid #ddd;
+                border-radius: 50%;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            }
+            #sidebar.minimized {
+                height: 0 !important;
+                width: 100% !important;
+            }
+            #sidebar.minimized .minimize-btn {
+                bottom: 20px;
+                left: auto;
+                right: 15px;
+            }
         }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1326,6 +1355,7 @@
 
     <div id="sidebar">
         <button class="minimize-btn" onclick="toggleSidebar()">◀</button>
+        <div id="sidebar-content" style="display:flex; flex-direction:column; height:100%; width:100%;">
         <div class="header" style="position:relative;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <button class="btn-dots" onclick="toggleSettingsMenu()">⋮</button>
@@ -1568,13 +1598,15 @@
             const btn = document.querySelector('.minimize-btn');
             sidebar.classList.toggle('minimized');
             const isMinimized = sidebar.classList.contains('minimized');
-            btn.innerHTML = isMinimized ? '▶' : '◀';
             
-            // Adjust header width if needed, or rely on flex
-            if (isMinimized) {
-                sidebar.style.width = '40px';
+            if (window.innerWidth > 768) {
+                btn.innerHTML = isMinimized ? '▶' : '◀';
+                sidebar.style.width = isMinimized ? '40px' : '380px';
             } else {
-                sidebar.style.width = '380px';
+                btn.innerHTML = isMinimized ? '▲' : '▼';
+                const h = isMinimized ? '0' : '55vh';
+                sidebar.style.height = h;
+                document.documentElement.style.setProperty('--sidebar-h', h);
             }
             
             setTimeout(() => {
@@ -2080,12 +2112,14 @@
                 document.getElementById('list').style.display = 'block';
                 
                 const sidebar = document.getElementById('sidebar');
+                const isMinimized = sidebar.classList.contains('minimized');
+                
                 if (window.innerWidth <= 768) {
-                    sidebar.style.height = '55vh';
+                    if (!isMinimized) sidebar.style.height = '55vh';
+                    else sidebar.style.height = '0';
                 } else {
-                    if (!sidebar.classList.contains('minimized')) {
-                        sidebar.style.width = '380px';
-                    }
+                    if (!isMinimized) sidebar.style.width = '380px';
+                    else sidebar.style.width = '40px';
                 }
                 setTimeout(() => map.invalidateSize(), 50);
 
