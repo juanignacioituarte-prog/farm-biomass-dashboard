@@ -12,6 +12,7 @@
     <link rel="apple-touch-icon" href="icon-512.png">
     <title>River Terrace Farm Monitor Pro | Feed Wedge</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
@@ -1076,6 +1077,38 @@
             display: inline-block;
             font-weight: bold;
         }
+        /* Minimized Sidebar */
+        #sidebar.minimized {
+            width: 40px !important;
+            overflow: hidden;
+        }
+        #sidebar.minimized .header, #sidebar.minimized #list, #sidebar.minimized #admin-view {
+            display: none !important;
+        }
+        .minimize-btn {
+            position: absolute;
+            top: 50%;
+            left: -20px;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 60px;
+            background: white;
+            border: 1px solid #ddd;
+            border-right: none;
+            border-radius: 8px 0 0 8px;
+            cursor: pointer;
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        }
+        #sidebar.minimized .minimize-btn {
+            left: 0;
+            border-right: 1px solid #ddd;
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+        }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -1103,7 +1136,8 @@
         <div class="map-controls">
             <div id="latest-date" class="date-label">LATEST DATA: --</div>
             <div id="sat-layer-controls" class="layer-group">
-                <button id="btn-ndvi" class="layer-btn active" onclick="setLayerMode('ndvi')">NDVI SATELLITE</button>
+                <button id="btn-ndvi" class="layer-btn active" onclick="setLayerMode('ndvi')">NDVI</button>
+                <button id="btn-sat" class="layer-btn" onclick="setLayerMode('satellite')">SATELLITE</button>
                 <button id="btn-cover" class="layer-btn" onclick="setLayerMode('cover')">COVER MAP</button>
             </div>
             <div id="legend" class="legend-box">
@@ -1294,6 +1328,7 @@
     </div>
 
     <div id="sidebar">
+        <button class="minimize-btn" onclick="toggleSidebar()">◀</button>
         <div class="header" style="position:relative;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <button class="btn-dots" onclick="toggleSettingsMenu()">⋮</button>
@@ -1528,6 +1563,15 @@
                     document.addEventListener('click', closeMenu);
                 }, 10);
             }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const btn = document.querySelector('.minimize-btn');
+            sidebar.classList.toggle('minimized');
+            const isMinimized = sidebar.classList.contains('minimized');
+            btn.innerHTML = isMinimized ? '▶' : '◀';
+            setTimeout(() => map.invalidateSize(), 300);
         }
 
         function toggleLegend() {
@@ -1892,7 +1936,16 @@
         }
 
         async function init() {
-            map = L.map('map', { zoomControl: false, minZoom: 13, maxZoom: 20 }).setView([-42.679, 172.879], 14);
+            map = L.map('map', { 
+                zoomControl: false, 
+                minZoom: 13, 
+                maxZoom: 20,
+                rotate: true,
+                touchRotate: true,
+                rotateControl: {
+                    closeOnZeroBearing: false
+                }
+            }).setView([-42.679, 172.879], 14);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             baseLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20 }).addTo(map);
 
@@ -2357,10 +2410,12 @@
         function setLayerMode(mode) {
             currentViewMode = mode;
             document.getElementById('btn-ndvi').classList.toggle('active', mode === 'ndvi');
+            document.getElementById('btn-sat').classList.toggle('active', mode === 'satellite');
             document.getElementById('btn-cover').classList.toggle('active', mode === 'cover');
             document.getElementById('legend').style.display = (mode === 'cover') ? 'block' : 'none';
+            
             if (ndviLayer) {
-                if ((mode === 'ndvi' && currentDashboardMode === 'satellite') || currentDashboardMode === 'breaks') {
+                if ((mode === 'ndvi' && (currentDashboardMode === 'satellite' || currentDashboardMode === 'breaks')) || currentDashboardMode === 'breaks') {
                     ndviLayer.addTo(map);
                 } else {
                     map.removeLayer(ndviLayer);
@@ -2896,7 +2951,7 @@
                 });
 
                 marker.on('dragend', () => {
-                    const newV = subdivideLongSegments(drawingVertices, 40);
+                    const newV = subdivideLongSegments(drawingVertices, 100);
                     if (newV.length !== drawingVertices.length) {
                         drawingVertices = newV;
                         rebuildDrawingMarkers();
@@ -3352,6 +3407,11 @@
             setBreakFullscreen(true);
             document.getElementById('edit-toolbar').style.display = 'flex';
             document.getElementById('btn-delete-pt').disabled = true;
+            
+            // Set group in edit toolbar
+            const groupSelect = document.getElementById('edit-group-select');
+            if (groupSelect) groupSelect.value = brk.group || '1st';
+            
             map.getContainer().style.cursor = 'pointer';
 
             renderEditPolygon();
@@ -3409,7 +3469,7 @@
                 });
 
                 marker.on('dragend', function () {
-                    const newVertices = subdivideLongSegments(editVertices, 40); // 40m auto-subdivide
+                    const newVertices = subdivideLongSegments(editVertices, 100); // 100m auto-subdivide
                     if (newVertices.length !== editVertices.length) {
                         editVertices = newVertices;
                         if (editSelectedIdx !== -1) {
@@ -3489,6 +3549,10 @@
             brk.areaSqm = isLineMode ? 0 : calculatePolygonArea(brk.vertices);
             brk.areaHa = isLineMode ? 0 : brk.areaSqm / 10000;
             brk.distanceMeters = isLineMode ? calculateLineDistance(brk.vertices) : 0;
+            
+            // Update group if changed
+            const groupSelect = document.getElementById('edit-group-select');
+            if (groupSelect) brk.group = groupSelect.value;
             
             let centerLat = 0, centerLng = 0;
             brk.vertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
@@ -3697,6 +3761,13 @@
     <!-- Break Edit Toolbar -->
     <div id="edit-toolbar" class="break-toolbar" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
         <span class="vertex-count" id="edit-vertex-info">Editing</span>
+        <select id="edit-group-select" style="padding: 4px; border-radius: 4px; font-size: 11px; background: #333; color: white; border: 1px solid #555;">
+            <option value="1st">1st Herd</option>
+            <option value="2nd">2nd Herd</option>
+            <option value="3rd">3rd Herd</option>
+            <option value="pennos">Pennos</option>
+            <option value="crops">Crops</option>
+        </select>
         <button class="btn-delete-pt" id="btn-delete-pt" onclick="event.stopPropagation(); deleteEditVertex()" disabled>✕ Delete Point</button>
         <button class="btn-done" onclick="event.stopPropagation(); finishEditBreak()">✓ Done</button>
         <button class="btn-cancel" onclick="event.stopPropagation(); cancelEditBreak()">✕ Cancel</button>
