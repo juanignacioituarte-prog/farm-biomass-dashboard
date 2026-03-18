@@ -1260,13 +1260,21 @@
                 <div class="feed-title">Crop Management</div>
                 <div class="calc-grid">
                     <div class="input-group">
-                        <label>Crop Yield (kgDM/ha)</label>
+                        <label>Default Crop Yield (kgDM/ha)</label>
                         <input type="number" id="inp-crop-yield" value="20000" oninput="saveAndRecalc()">
                     </div>
                     <div class="input-group">
                         <label>Target Feed (kgDM/cow)</label>
                         <input type="number" id="inp-crop-feed" value="4" oninput="saveAndRecalc()">
                     </div>
+                </div>
+                
+                <div id="crop-paddock-yields-list" style="margin-top:15px; background:#f9f9f9; padding:10px; border-radius:6px; border:1px solid #eee;">
+                    <div style="font-size:11px; font-weight:bold; color:#7f8c8d; margin-bottom:10px; display:flex; justify-content:space-between;">
+                        <span>CROP PADDOCK</span>
+                        <span>EST. YIELD (kgDM/ha)</span>
+                    </div>
+                    <!-- Paddock-specific yield inputs will be injected here -->
                 </div>
                 <div style="font-size:12px; font-weight:bold; color:#7f8c8d; margin-top:10px; margin-bottom:5px;">Herds in Crops:</div>
                 <div id="crop-herd-toggles" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px; font-size:12px;">
@@ -1487,6 +1495,8 @@
             { id: 'pennos', name: 'Pennos', color: '#e74c3c' }
         ];
         let activeBreakGroup = 'all';
+        let cropYields = {}; // { paddockName: yield }
+        let allCropPaddocks = []; // List of paddock names with 'CROP' status
 
         function getGroupColor(groupId) {
             const g = BREAK_GROUPS.find(g => g.id === (groupId || '1st')) || BREAK_GROUPS[0];
@@ -1816,9 +1826,19 @@
                     fetch(PARTIAL_CSV_URL + "&t=" + Date.now())
                 ]);
                 const textEx = await resEx.text();
+                allCropPaddocks = [];
                 textEx.split('\n').filter(l => l.trim() !== '').slice(1).forEach(line => {
-                    const cols = line.split(',').map(c => c.trim().toLowerCase());
-                    if (cols[0]) excludedPaddocks.set(cols[0], cols[1] || 'out');
+                    const cols = line.split(',').map(c => c.trim());
+                    const name = cols[0];
+                    const lowerName = name.toLowerCase();
+                    const status = (cols[1] || "").toUpperCase();
+                    
+                    if (name) {
+                        excludedPaddocks.set(lowerName, status || 'OUT');
+                        if (status === 'CROP') {
+                            allCropPaddocks.push(name);
+                        }
+                    }
                 });
                 const textPa = await resPa.text();
                 textPa.split('\n').filter(l => l.trim() !== '').slice(1).forEach(line => {
@@ -1923,6 +1943,10 @@
                 document.getElementById('inp-crop-feed').value = data.cropFeed;
                 localStorage.setItem('feed_crop_feed', data.cropFeed);
             }
+            if (data.cropYields) {
+                cropYields = data.cropYields;
+                localStorage.setItem('feed_crop_yields', JSON.stringify(cropYields));
+            }
             if (data.herdCows) {
                 localStorage.setItem('herd_cow_numbers', JSON.stringify(data.herdCows));
             }
@@ -1956,6 +1980,7 @@
             // Crop Settings
             if (localStorage.getItem('feed_crop_yield')) document.getElementById('inp-crop-yield').value = localStorage.getItem('feed_crop_yield');
             if (localStorage.getItem('feed_crop_feed')) document.getElementById('inp-crop-feed').value = localStorage.getItem('feed_crop_feed');
+            if (localStorage.getItem('feed_crop_yields')) cropYields = JSON.parse(localStorage.getItem('feed_crop_yields'));
 
             // Load Herd Inputs
             const herdGrid = document.getElementById('herd-inputs');
@@ -2623,6 +2648,11 @@
             }, 1500); // 1.5s debounce to avoid spamming the cloud API on rapid input
         }
 
+        function updateCropPaddockYield(pName, val) {
+            cropYields[pName] = safeNum(val);
+            saveAndRecalc();
+        }
+
         function saveAndRecalc() {
             localStorage.setItem('feed_residual', document.getElementById('inp-residual').value);
             localStorage.setItem('feed_cows', document.getElementById('inp-cows').value);
@@ -2730,6 +2760,29 @@
             const cropHerds = JSON.parse(localStorage.getItem('herd_in_crops') || '[]');
             let cropHtml = '';
             let herdCropM2Map = {};
+
+            // Render Paddock-Specific Yields
+            const cropPaddockList = document.getElementById('crop-paddock-yields-list');
+            if (allCropPaddocks.length > 0) {
+                cropPaddockList.style.display = 'block';
+                let listHtml = `<div style="font-size:11px; font-weight:bold; color:#7f8c8d; margin-bottom:10px; display:flex; justify-content:space-between;">
+                    <span>CROP PADDOCK</span>
+                    <span>EST. YIELD (kgDM/ha)</span>
+                </div>`;
+                allCropPaddocks.forEach(pName => {
+                    const y = cropYields[pName] || cropYield; // fallback to global
+                    listHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:12px; font-weight:600;">${pName}</span>
+                        <input type="number" 
+                            style="width:80px; padding:4px; border:1px solid #ddd; border-radius:4px; font-size:12px; text-align:right;"
+                            value="${y}" 
+                            oninput="updateCropPaddockYield('${pName}', this.value)" />
+                    </div>`;
+                });
+                cropPaddockList.innerHTML = listHtml;
+            } else {
+                cropPaddockList.style.display = 'none';
+            }
 
             BREAK_GROUPS.forEach(g => {
                 if (g.id === 'all') return;
@@ -2878,6 +2931,7 @@
                 shortPct: document.getElementById('inp-short-pct').value,
                 cropYield: document.getElementById('inp-crop-yield').value,
                 cropFeed: document.getElementById('inp-crop-feed').value,
+                cropYields: cropYields,
                 cropHerds: JSON.parse(localStorage.getItem('herd_in_crops') || '[]')
             };
 
@@ -3085,9 +3139,14 @@
 
             let cropWidthMeters = 0;
             if (isLineMode) {
-                const herdCropM2Map = JSON.parse(localStorage.getItem('feed_crop_m2_per_herd') || '{}');
-                const reqM2 = herdCropM2Map[activeBreakGroup] || 0;
-                if (distanceMeters > 0) {
+                const defaultYield = safeNum(document.getElementById('inp-crop-yield').value);
+                const paddockYield = (paddockName && cropYields[paddockName]) ? cropYields[paddockName] : defaultYield;
+                const cropFeed = safeNum(document.getElementById('inp-crop-feed').value);
+                const hCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}')[activeBreakGroup] || 0;
+                
+                if (distanceMeters > 0 && hCows > 0 && paddockYield > 0) {
+                    const hDemand = cropFeed * hCows;
+                    const reqM2 = (hDemand / paddockYield) * 10000;
                     cropWidthMeters = reqM2 / distanceMeters;
                 }
             }
@@ -3625,9 +3684,16 @@
             brk.paddock = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
 
             if (isLineMode) {
-                const herdCropM2Map = JSON.parse(localStorage.getItem('feed_crop_m2_per_herd') || '{}');
-                const reqM2 = herdCropM2Map[brk.group] || 0;
-                brk.cropWidthMeters = (brk.distanceMeters > 0) ? (reqM2 / brk.distanceMeters) : 0;
+                const defaultYield = safeNum(document.getElementById('inp-crop-yield').value);
+                const paddockYield = (brk.paddock && cropYields[brk.paddock]) ? cropYields[brk.paddock] : defaultYield;
+                const cropFeed = safeNum(document.getElementById('inp-crop-feed').value);
+                const hCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}')[brk.group] || 0;
+                
+                if (brk.distanceMeters > 0 && hCows > 0 && paddockYield > 0) {
+                    const hDemand = cropFeed * hCows;
+                    const reqM2 = (hDemand / paddockYield) * 10000;
+                    brk.cropWidthMeters = reqM2 / brk.distanceMeters;
+                }
             }
             brk.lastEditedBy = localStorage.getItem('auth_name') || 'Unknown User';
             brk.lastEditedAt = new Date().toISOString();
