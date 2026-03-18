@@ -940,9 +940,10 @@
             }
 
             #map {
-                flex: 1; /* Key: grow to fill vertical space */
+                flex: 1 1 auto; /* Grow to fill vertical space */
                 width: 100%;
-                height: var(--sidebar-h, 45vh); /* fallback but flex:1 overrides anyway */
+                height: 0; /* Let flex handle the height */
+                min-height: 0;
             }
 
             #sidebar {
@@ -1091,25 +1092,26 @@
         .minimize-btn {
             position: absolute;
             top: 20px;
-            left: -28px; /* Slightly wider button */
-            width: 28px;
-            height: 56px;
+            left: -32px; /* Slightly wider button for touch */
+            width: 32px;
+            height: 60px;
             background: white;
             border: 1px solid #ddd;
             border-right: none;
             border-radius: 8px 0 0 8px;
             cursor: pointer;
-            z-index: 3001; /* Above EVERYTHING */
+            z-index: 3001;
             display: flex;
             align-items: center;
             justify-content: center;
             box-shadow: -2px 0 8px rgba(0,0,0,0.15);
-            font-size: 14px;
+            font-size: 16px;
             color: var(--accent);
             font-weight: bold;
+            pointer-events: auto; /* Ensure it captures clicks */
         }
         #sidebar.minimized .minimize-btn {
-            left: -28px;
+            left: -32px;
             border-right: 1px solid #ddd;
             border-left: none;
             border-radius: 0 8px 8px 0;
@@ -1998,7 +2000,7 @@
                     closeOnZeroBearing: false
                 }
             }).setView([-42.679, 172.879], 14);
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            L.control.zoom({ position: 'topleft' }).addTo(map);
             baseLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20 }).addTo(map);
 
             // Load settings first
