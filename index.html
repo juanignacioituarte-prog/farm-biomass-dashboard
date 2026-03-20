@@ -612,6 +612,11 @@
                 70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
                 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
             }
+            .btn-audio-aid.beeping {
+                background: #e74c3c !important;
+                border-color: #c0392b !important;
+                transform: scale(1.2);
+            }
             .break-card.audio-active {
                 background: #f0fff4 !important;
                 border-color: #2ecc71 !important;
@@ -3276,11 +3281,18 @@
         }
 
         function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    console.log("AudioContext created:", audioCtx.state);
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume().then(() => console.log("AudioContext resumed"));
+                }
+                // Test beep on init
+                playBeep(880, 0.05);
+            } catch (e) {
+                console.error("Audio init failed:", e);
             }
         }
 
@@ -3294,31 +3306,43 @@
             renderBreaksDashboard();
         }
 
+        let lastBeepRate = 0;
         function updateAudioAid(latlng) {
             if (!activeSoundBreakId || !latlng) return;
             const brk = savedBreaks.find(b => b.id === activeSoundBreakId);
             if (!brk) { stopAudioAid(); return; }
 
             const distance = getMinDistanceToFence(latlng, brk);
+            console.log(`AudioAid: dist=${distance.toFixed(2)}m (break=${brk.name})`);
             
             if (distance > 5) {
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 if (oscillator) { stopOsc(); }
+                lastBeepRate = 0;
             } else if (distance <= 1) {
                 // Continuous tone
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 playTone(440, 1.0); // A4 continuous
                 if (navigator.vibrate) navigator.vibrate(200);
+                lastBeepRate = -1; // special state for continuous
             } else {
-                // Beeping (frequency increases as distance decreases)
-                const beepRate = 1 + (5 - distance) * 2; 
-                if (beepInterval) clearInterval(beepInterval);
-                playBeep(440, 0.1); // Short beep
-                if (navigator.vibrate) navigator.vibrate(50);
-                beepInterval = setInterval(() => {
-                    playBeep(440, 0.1);
+                // Beeping (frequency increases as distance decreases: 1Hz to 10Hz)
+                const beepRate = Math.min(10, 1 + (5 - distance) * 2); 
+                
+                // Only change interval if rate change is significant (> 10%)
+                if (Math.abs(beepRate - lastBeepRate) > (lastBeepRate * 0.1) || lastBeepRate <= 0) {
+                    if (beepInterval) clearInterval(beepInterval);
+                    console.log(`AudioAid: setting beepRate=${beepRate.toFixed(2)}Hz`);
+                    
+                    playBeep(440, 0.1); 
                     if (navigator.vibrate) navigator.vibrate(50);
-                }, 1000 / beepRate);
+                    
+                    beepInterval = setInterval(() => {
+                        playBeep(440, 0.1);
+                        if (navigator.vibrate) try { navigator.vibrate(50); } catch(e){}
+                    }, 1000 / beepRate);
+                    lastBeepRate = beepRate;
+                }
             }
         }
 
@@ -3348,6 +3372,15 @@
             g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
+
+            // Visual feedback
+            if (activeSoundBreakId) {
+                const btn = document.querySelector(`#break-${activeSoundBreakId} .btn-audio-aid`);
+                if (btn) {
+                    btn.classList.add('beeping');
+                    setTimeout(() => btn.classList.remove('beeping'), duration * 1000 + 50);
+                }
+            }
         }
 
         function stopOsc() {
