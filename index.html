@@ -3343,7 +3343,8 @@
             }
 
             const distance = getMinDistanceToFence(latlng, brk);
-            console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m (paddock=${brk.paddock})`);
+            const acc = (currentGPSPos && currentGPSPos.accuracy) ? currentGPSPos.accuracy : 0;
+            console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m acc=${acc.toFixed(1)}m`);
             
             if (distance > 5) {
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
@@ -3426,25 +3427,37 @@
         }
 
         function getFenceSegments(brk) {
-            const paddockLayer = paddockMap[brk.paddock];
             if (brk.cropMode === 'line') return [brk.vertices];
-            if (!paddockLayer || !brk.vertices || brk.vertices.length < 3) return [];
+            if (!brk.vertices || brk.vertices.length < 3) return [];
 
-            const paddockFeat = paddockLayer.feature;
-            const paddockBoundary = turf.polygonToLine(paddockFeat);
             const fenceSegments = [];
+            const paddockLayer = paddockMap[brk.paddock];
             
-            for (let i = 0; i < brk.vertices.length; i++) {
-                const j = (i + 1) % brk.vertices.length;
-                const p1 = brk.vertices[i];
-                const p2 = brk.vertices[j];
-                const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
-                const pt = turf.point([mid.lng, mid.lat]);
-                const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
-                if (dist > 2) {
-                    fenceSegments.push([p1, p2]);
+            if (paddockLayer && paddockLayer.feature) {
+                const paddockBoundary = turf.polygonToLine(paddockLayer.feature);
+                for (let i = 0; i < brk.vertices.length; i++) {
+                    const j = (i + 1) % brk.vertices.length;
+                    const p1 = brk.vertices[i];
+                    const p2 = brk.vertices[j];
+                    const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
+                    const pt = turf.point([mid.lng, mid.lat]);
+                    const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
+                    if (dist > 2) {
+                        fenceSegments.push([p1, p2]);
+                    }
                 }
             }
+
+            // FALLBACK: If no fence segments found (or no paddock layer), use all segments
+            if (fenceSegments.length === 0) {
+                console.log("AudioAid: No distinct fence segments found, using all segments as fallback.");
+                for (let i = 0; i < brk.vertices.length; i++) {
+                    const j = (i + 1) % brk.vertices.length;
+                    fenceSegments.push([brk.vertices[i], brk.vertices[j]]);
+                }
+            }
+
+            console.log(`AudioAid: Found ${fenceSegments.length} fence segments.`);
             return fenceSegments;
         }
 
