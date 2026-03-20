@@ -3052,33 +3052,49 @@
 
             // 2. Try to load from cloud and merge
             if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.length > 5) {
+                console.log("Loading breaks from cloud...");
                 fetch(GOOGLE_SCRIPT_URL + '?type=breaks&_t=' + Date.now(), { cache: 'no-store' })
                     .then(res => res.json())
                     .then(data => {
                         if (data && Array.isArray(data.breaks)) {
-                            // Cloud has breaks — use cloud as source of truth
-                            savedBreaks = data.breaks;
+                            console.log("Cloud breaks received:", data.breaks.length);
+                            // Merge: Keep local ones, add missing ones from cloud
+                            let merged = [...savedBreaks];
+                            data.breaks.forEach(cb => {
+                                if (!merged.find(lb => lb.id === cb.id)) {
+                                    merged.push(cb);
+                                }
+                            });
+                            // Sort by created date descending
+                            merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                            
+                            savedBreaks = merged;
                             localStorage.setItem('farm_breaks', JSON.stringify(savedBreaks));
+                            
                             if (currentDashboardMode === 'breaks') {
                                 renderBreaksDashboard();
                                 renderBreaksOnMap();
                             }
                         }
                     })
-                    .catch(e => { console.log('Cloud breaks load failed, using local'); });
+                    .catch(e => { console.log('Cloud breaks load failed, using local', e); });
             }
         }
 
         function saveBreaks() {
+            console.log("Saving breaks locally...", savedBreaks.length);
             // Save locally immediately
             localStorage.setItem('farm_breaks', JSON.stringify(savedBreaks));
 
             // Save to cloud in background
             if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.length > 5) {
+                console.log("Saving breaks to cloud...");
                 fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify({ type: 'breaks', breaks: savedBreaks })
-                }).catch(e => { console.log('Cloud breaks save failed'); });
+                })
+                .then(() => console.log("Cloud save complete"))
+                .catch(e => { console.log('Cloud breaks save failed', e); });
             }
         }
 
@@ -3195,58 +3211,66 @@
         }
 
         function finishBreak() {
-            const isLineMode = currentDrawingMode === 'line';
-            
-            if (!isLineMode && drawingVertices.length < 3) return;
-            if (isLineMode && drawingVertices.length < 2) return;
-            
-            const areaSqm = isLineMode ? 0 : calculatePolygonArea(drawingVertices);
-            const areaHa = isLineMode ? 0 : areaSqm / 10000;
-            const distanceMeters = isLineMode ? calculateLineDistance(drawingVertices) : 0;
-
-            let centerLat = 0, centerLng = 0;
-            drawingVertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
-            centerLat /= drawingVertices.length;
-            centerLng /= drawingVertices.length;
-            let paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
-
-            let baseName = paddockName ? paddockName : (isLineMode ? 'Crop Line' : 'Break');
-            let breaksInPaddock = savedBreaks.filter(b => b.name && b.name.startsWith(baseName)).length;
-            const breakName = paddockName ? `${baseName} ${isLineMode ? 'Line' : 'Break'} ${breaksInPaddock + 1}` : `${isLineMode ? 'Line' : 'Break'} ${savedBreaks.length + 1}`;
-
-            let cropWidthMeters = 0;
-            if (isLineMode) {
-                const defaultYield = safeNum(document.getElementById('inp-crop-yield').value);
-                const paddockYield = (paddockName && cropYields[paddockName]) ? cropYields[paddockName] : defaultYield;
-                const cropFeed = safeNum(document.getElementById('inp-crop-feed').value);
-                const hCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}')[activeBreakGroup] || 0;
+            try {
+                const isLineMode = currentDrawingMode === 'line';
+                console.log("Finishing break, mode:", currentDrawingMode, "vertices:", drawingVertices.length);
                 
-                if (distanceMeters > 0 && hCows > 0 && paddockYield > 0) {
-                    const hDemand = cropFeed * hCows;
-                    const reqM2 = (hDemand / paddockYield) * 10000;
-                    cropWidthMeters = reqM2 / distanceMeters;
-                }
-            }
+                if (!isLineMode && drawingVertices.length < 3) return;
+                if (isLineMode && drawingVertices.length < 2) return;
+                
+                const areaSqm = isLineMode ? 0 : calculatePolygonArea(drawingVertices);
+                const areaHa = isLineMode ? 0 : areaSqm / 10000;
+                const distanceMeters = isLineMode ? calculateLineDistance(drawingVertices) : 0;
 
-            const newBreak = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                name: breakName,
-                paddock: paddockName,
-                vertices: [...drawingVertices],
-                areaSqm: areaSqm,
-                areaHa: areaHa,
-                distanceMeters: distanceMeters,
-                cropWidthMeters: cropWidthMeters,
-                cropMode: isLineMode ? 'line' : 'polygon',
-                createdAt: new Date().toISOString(),
-                createdBy: localStorage.getItem('auth_name') || 'Unknown User',
-                group: activeBreakGroup === 'all' ? '1st' : activeBreakGroup
-            };
-            savedBreaks.push(newBreak);
-            saveBreaks();
-            cleanupDrawing();
-            renderBreaksDashboard();
-            renderBreaksOnMap();
+                let centerLat = 0, centerLng = 0;
+                drawingVertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
+                centerLat /= drawingVertices.length;
+                centerLng /= drawingVertices.length;
+                let paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
+
+                let baseName = paddockName ? paddockName : (isLineMode ? 'Crop Line' : 'Break');
+                let breaksInPaddock = savedBreaks.filter(b => b.name && b.name.startsWith(baseName)).length;
+                const breakName = paddockName ? `${baseName} ${isLineMode ? 'Line' : 'Break'} ${breaksInPaddock + 1}` : `${isLineMode ? 'Line' : 'Break'} ${savedBreaks.length + 1}`;
+
+                let cropWidthMeters = 0;
+                if (isLineMode) {
+                    const defaultYield = safeNum(document.getElementById('inp-crop-yield').value);
+                    const paddockYield = (paddockName && cropYields[paddockName]) ? cropYields[paddockName] : defaultYield;
+                    const cropFeed = safeNum(document.getElementById('inp-crop-feed').value);
+                    const hCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}')[activeBreakGroup] || 0;
+                    
+                    if (distanceMeters > 0 && hCows > 0 && paddockYield > 0) {
+                        const hDemand = cropFeed * hCows;
+                        const reqM2 = (hDemand / paddockYield) * 10000;
+                        cropWidthMeters = reqM2 / distanceMeters;
+                    }
+                }
+
+                const newBreak = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    name: breakName,
+                    paddock: paddockName,
+                    vertices: [...drawingVertices],
+                    areaSqm: areaSqm,
+                    areaHa: areaHa,
+                    distanceMeters: distanceMeters,
+                    cropWidthMeters: cropWidthMeters,
+                    cropMode: isLineMode ? 'line' : 'polygon',
+                    createdAt: new Date().toISOString(),
+                    createdBy: localStorage.getItem('auth_name') || 'Unknown User',
+                    group: activeBreakGroup === 'all' ? '1st' : activeBreakGroup
+                };
+                
+                console.log("New break created:", newBreak);
+                savedBreaks.push(newBreak);
+                saveBreaks();
+                cleanupDrawing();
+                renderBreaksDashboard();
+                renderBreaksOnMap();
+            } catch (e) {
+                console.error("Error in finishBreak:", e);
+                alert("Failed to save break: " + e.message);
+            }
         }
 
         function cancelBreak() {
