@@ -3270,12 +3270,14 @@
 
         // === Audio Fence Alignment Aid ===
         function toggleBreakAudio(breakId) {
-            if (activeSoundBreakId === breakId) {
+            const bIdStr = String(breakId);
+            if (activeSoundBreakId === bIdStr) {
                 stopAudioAid();
                 return;
             }
             stopAudioAid();
-            activeSoundBreakId = breakId;
+            activeSoundBreakId = bIdStr;
+            console.log("AudioAid set to:", activeSoundBreakId);
             initAudio();
             renderBreaksDashboard();
         }
@@ -3309,11 +3311,15 @@
         let lastBeepRate = 0;
         function updateAudioAid(latlng) {
             if (!activeSoundBreakId || !latlng) return;
-            const brk = savedBreaks.find(b => b.id === activeSoundBreakId);
-            if (!brk) { stopAudioAid(); return; }
+            const brk = savedBreaks.find(b => String(b.id) === activeSoundBreakId);
+            if (!brk) { 
+                console.log("AudioAid: break not found for ID", activeSoundBreakId);
+                stopAudioAid(); 
+                return; 
+            }
 
             const distance = getMinDistanceToFence(latlng, brk);
-            console.log(`AudioAid: dist=${distance.toFixed(2)}m (break=${brk.name})`);
+            console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m (paddock=${brk.paddock})`);
             
             if (distance > 5) {
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
