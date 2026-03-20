@@ -585,6 +585,38 @@
             background: #faf5ff;
         }
 
+            .btn-delete-card:hover { color: #c0392b; background: #fdf2f2; }
+
+            .btn-audio-aid {
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 50%;
+                width: 32px;
+                height: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                font-size: 14px;
+                transition: 0.2s;
+            }
+            .btn-audio-aid:hover { background: #e9ecef; }
+            .btn-audio-aid.active {
+                background: #2ecc71;
+                color: white;
+                border-color: #27ae60;
+                animation: pulse-audio 1.5s infinite;
+            }
+            @keyframes pulse-audio {
+                0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4); }
+                70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+            }
+            .break-card.audio-active {
+                background: #f0fff4 !important;
+                border-color: #2ecc71 !important;
+            }
+
         .break-card.active {
             border-left-color: #8e44ad;
             background: #f5eeff;
@@ -1498,6 +1530,12 @@
         let cropYields = {}; // { paddockName: yield }
         let allCropPaddocks = []; // List of paddock names with 'CROP' status
 
+        let activeSoundBreakId = null; 
+        let audioCtx = null;
+        let oscillator = null;
+        let gainNode = null;
+        let beepInterval = null;
+
         function getGroupColor(groupId) {
             const g = BREAK_GROUPS.find(g => g.id === (groupId || '1st')) || BREAK_GROUPS[0];
             return g.color;
@@ -1698,6 +1736,7 @@
                         gpsCircle.setLatLng(latlng);
                         gpsCircle.setRadius(acc);
                     }
+                    updateAudioAid(latlng);
                 },
                 function (err) {
                     alert('Unable to get location: ' + err.message);
@@ -2175,7 +2214,7 @@
                 } else {
                     calculateFeedLogic();
                 }
-
+                return;
             } else {
                 document.getElementById('map').style.display = 'block';
                 document.getElementById('list').style.display = 'block';
@@ -2428,6 +2467,7 @@
 
         /* Rendering */
         function renderDashboard() {
+            if (currentDashboardMode !== 'manual' && currentDashboardMode !== 'satellite') return;
             const data = getCurrentModeData();
             const sorted = [...data].sort((a, b) => {
                 if (a.isOut !== b.isOut) return a.isOut ? 1 : -1;
@@ -3223,6 +3263,141 @@
             setBreakFullscreen(false);
         }
 
+        // === Audio Fence Alignment Aid ===
+        function toggleBreakAudio(breakId) {
+            if (activeSoundBreakId === breakId) {
+                stopAudioAid();
+                return;
+            }
+            stopAudioAid();
+            activeSoundBreakId = breakId;
+            initAudio();
+            renderBreaksDashboard();
+        }
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function stopAudioAid() {
+            activeSoundBreakId = null;
+            if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
+            if (oscillator) {
+                try { oscillator.stop(); } catch(e){}
+                oscillator = null;
+            }
+            renderBreaksDashboard();
+        }
+
+        function updateAudioAid(latlng) {
+            if (!activeSoundBreakId || !latlng) return;
+            const brk = savedBreaks.find(b => b.id === activeSoundBreakId);
+            if (!brk) { stopAudioAid(); return; }
+
+            const distance = getMinDistanceToFence(latlng, brk);
+            
+            if (distance > 5) {
+                if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
+                if (oscillator) { stopOsc(); }
+            } else if (distance <= 1) {
+                // Continuous tone
+                if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
+                playTone(440, 1.0); // A4 continuous
+                if (navigator.vibrate) navigator.vibrate(200);
+            } else {
+                // Beeping (frequency increases as distance decreases)
+                const beepRate = 1 + (5 - distance) * 2; 
+                if (beepInterval) clearInterval(beepInterval);
+                playBeep(440, 0.1); // Short beep
+                if (navigator.vibrate) navigator.vibrate(50);
+                beepInterval = setInterval(() => {
+                    playBeep(440, 0.1);
+                    if (navigator.vibrate) navigator.vibrate(50);
+                }, 1000 / beepRate);
+            }
+        }
+
+        function playTone(freq, volume) {
+            if (!audioCtx) return;
+            if (!oscillator) {
+                oscillator = audioCtx.createOscillator();
+                gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                oscillator.start();
+            }
+            gainNode.gain.setTargetAtTime(volume * 0.1, audioCtx.currentTime, 0.05);
+        }
+
+        function playBeep(freq, duration) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.connect(g);
+            g.connect(audioCtx.destination);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function stopOsc() {
+            if (oscillator) {
+                gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+                setTimeout(() => {
+                    if (oscillator && !activeSoundBreakId) {
+                        oscillator.stop();
+                        oscillator = null;
+                    }
+                }, 100);
+            }
+        }
+
+        function getFenceSegments(brk) {
+            const paddockLayer = paddockMap[brk.paddock];
+            if (brk.cropMode === 'line') return [brk.vertices];
+            if (!paddockLayer || !brk.vertices || brk.vertices.length < 3) return [];
+
+            const paddockFeat = paddockLayer.feature;
+            const paddockBoundary = turf.polygonToLine(paddockFeat);
+            const fenceSegments = [];
+            
+            for (let i = 0; i < brk.vertices.length; i++) {
+                const j = (i + 1) % brk.vertices.length;
+                const p1 = brk.vertices[i];
+                const p2 = brk.vertices[j];
+                const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
+                const pt = turf.point([mid.lng, mid.lat]);
+                const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
+                if (dist > 2) {
+                    fenceSegments.push([p1, p2]);
+                }
+            }
+            return fenceSegments;
+        }
+
+        function getMinDistanceToFence(latlng, brk) {
+            const segments = getFenceSegments(brk);
+            if (segments.length === 0) return 999;
+            const pt = turf.point([latlng.lng, latlng.lat]);
+            let minD = 999;
+            segments.forEach(seg => {
+                const line = turf.lineString(seg.map(v => [v.lng, v.lat]));
+                const d = turf.pointToLineDistance(pt, line, { units: 'meters' });
+                if (d < minD) minD = d;
+            });
+            return minD;
+        }
+
         function promptDeleteBreak(breakId, event) {
             if (event) {
                 event.stopPropagation();
@@ -3360,6 +3535,7 @@
         }
 
         function renderBreaksDashboard() {
+            if (currentDashboardMode !== 'breaks') return;
             const list = document.getElementById('list');
             const groupBreaks = activeBreakGroup === 'all' ? savedBreaks : savedBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
             const count = groupBreaks.length;
@@ -3429,6 +3605,8 @@
                 const dateStr = created.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
                 const timeStr = created.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' });
                 const isSelected = selectedBreakIds.has(brk.id);
+                const isAudioActive = activeSoundBreakId === brk.id;
+                
                 const cardClick = breakSelectMode
                     ? `toggleBreakSelection('${brk.id}', event)`
                     : `focusBreakOnMap('${brk.id}'); document.querySelectorAll('.break-card').forEach(c=>c.classList.remove('active')); this.classList.add('active');`;
@@ -3504,10 +3682,18 @@
                 }
 
 
-                html += `<div class="break-card ${isSelected ? 'selected' : ''}" id="break-${brk.id}" onclick="${cardClick}" style="border-left: 4px solid ${gColor};">
+                html += `<div class="break-card ${isSelected ? 'selected' : ''} ${isAudioActive ? 'audio-active' : ''}" id="break-${brk.id}" onclick="${cardClick}" style="border-left: 4px solid ${gColor};">
                         ${breakSelectMode
                         ? `<input type="checkbox" class="break-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleBreakSelection('${brk.id}', event)" style="position:absolute; top:14px; right:10px;" />`
-                        : `<button class="btn-edit-break" onclick="event.stopPropagation(); startEditBreak('${brk.id}')" title="Edit vertices">\u270e</button><button class="btn-delete-break" onclick="promptDeleteBreak('${brk.id}', event)" title="Delete break">\ud83d\uddd1\ufe0f</button>`
+                        : `<div style="position:absolute; top:10px; right:10px; display:flex; gap:6px;">
+                             <button class="btn-audio-aid ${isAudioActive ? 'active' : ''}" 
+                                     onclick="event.stopPropagation(); toggleBreakAudio('${brk.id}'); if ('vibrate' in navigator) navigator.vibrate(50);" 
+                                     title="${isAudioActive ? 'Stop Audio Aid' : 'Start Audio Aid'}">
+                                 ${isAudioActive ? '\u23f9\ufe0f' : '\u25b6\ufe0f'}
+                             </button>
+                             <button class="btn-edit-break" style="position:static;" onclick="event.stopPropagation(); startEditBreak('${brk.id}')" title="Edit vertices">\u270e</button>
+                             <button class="btn-delete-break" style="position:static;" onclick="promptDeleteBreak('${brk.id}', event)" title="Delete break">\ud83d\uddd1\ufe0f</button>
+                           </div>`
                     }
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-right:50px;">
                             <input class="break-name-input" value="${brk.name}" onchange="renameBreak('${brk.id}', this.value)" onclick="event.stopPropagation()" />
