@@ -1762,15 +1762,47 @@
 
                         manualModeData = rows.slice(1).map(r => {
                             const name = (r[0] || "").trim();
-                            const latestCover = safeNum(r[1]);
-                            const prevCover = safeNum(r[2]);
+                            const norm = normName(name);
+                            let latestCover = safeNum(r[1]);
+                            let prevCover = safeNum(r[2]);
+                            let lDate = latestDate;
+                            let pDate = prevDate;
+
+                            // Merge from calibration sheet (manualEntries) if more recent
+                            const paddockEntries = manualEntries.filter(e => e.lower === norm).sort((a, b) => b.dateObj - a.dateObj);
+                            if (paddockEntries.length > 0) {
+                                const mLatest = paddockEntries[0];
+                                if (!lDate || mLatest.dateObj > lDate) {
+                                    // Shift grid latest to previous if it was actually older
+                                    if (lDate && (!pDate || lDate > pDate)) {
+                                        pDate = lDate;
+                                        prevCover = latestCover;
+                                    }
+                                    lDate = mLatest.dateObj;
+                                    latestCover = mLatest.cover;
+                                    
+                                    // If we have a second newest entry in calibration sheet, use it as previous
+                                    if (paddockEntries.length > 1) {
+                                        const mPrev = paddockEntries[1];
+                                        if (!pDate || mPrev.dateObj > pDate) {
+                                            pDate = mPrev.dateObj;
+                                            prevCover = mPrev.cover;
+                                        }
+                                    }
+                                }
+                            }
+
                             const isOut = (latestCover === 0);
-                            const growth = isOut ? 0 : Math.round((latestCover - prevCover) / dayDiff);
+                            const dDiff = (lDate && pDate) ? Math.max(1, (lDate - pDate) / 86400000) : dayDiff;
+                            const growth = isOut ? 0 : Math.round((latestCover - prevCover) / dDiff);
 
                             return {
-                                name, latest: { cover: latestCover, formattedDate: fmtNZ(latestDate), ts: latestDate ? latestDate.getTime() : null },
-                                previous: { cover: prevCover, formattedDate: fmtNZ(prevDate) },
-                                growthRate: growth, isOut: isOut, area: areaLookup[name] || 0
+                                name, 
+                                latest: { cover: latestCover, formattedDate: fmtNZ(lDate), ts: lDate ? lDate.getTime() : null },
+                                previous: { cover: prevCover, formattedDate: fmtNZ(pDate) },
+                                growthRate: growth, 
+                                isOut: isOut, 
+                                area: areaLookup[name] || 0
                             };
                         });
 
