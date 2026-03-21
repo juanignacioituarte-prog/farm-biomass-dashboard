@@ -3684,23 +3684,10 @@
                 html += `<button class="btn-delete-selected" onclick="deleteSelectedBreaks()">\u2715 DELETE SELECTED (${selectedBreakIds.size})</button>`;
             }
 
-            const recentBreaksGroup = groupBreaks.filter(b => b.createdAt && new Date(b.createdAt) >= sevenDaysAgo);
-            const olderBreaksGroup = groupBreaks.filter(b => !b.createdAt || new Date(b.createdAt) < sevenDaysAgo);
-
             if (groupBreaks.length === 0) {
                 html += `<div class="break-empty"><span class="break-empty-icon">\ud83d\udcd0</span>No breaks found in this group.<br>Click the button above to draw your first break on the map.</div>`;
-            }
-
-            if (recentBreaksGroup.length > 0) {
-                if (olderBreaksGroup.length > 0) html += `<div style="font-size:10px; font-weight:bold; color:#7f8c8d; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">Recently Created</div>`;
-                recentBreaksGroup.forEach(brk => {
-                    html += renderBreakCardHtml(brk);
-                });
-            }
-
-            if (olderBreaksGroup.length > 0) {
-                html += `<div style="font-size:10px; font-weight:bold; color:#7f8c8d; margin:15px 0 10px; text-transform:uppercase; letter-spacing:0.5px;">Earlier Breaks</div>`;
-                olderBreaksGroup.forEach(brk => {
+            } else {
+                groupBreaks.forEach(brk => {
                     html += renderBreakCardHtml(brk);
                 });
             }
