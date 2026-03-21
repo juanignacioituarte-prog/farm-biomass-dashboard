@@ -1155,8 +1155,45 @@
             box-shadow: 2px 0 8px rgba(0,0,0,0.15);
         }
 
-        /* Mobile Adjustments for Sidebar */
-        @media (max-width: 768px) {
+        #distance-debug-overlay {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+            background: rgba(255,255,255,0.95);
+            border: 2px solid #e74c3c;
+            border-radius: 8px;
+            padding: 10px;
+            width: 140px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            font-family: sans-serif;
+            font-size: 12px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            text-align: center;
+        }
+        .debug-btn {
+            background: #34495e;
+            color: white;
+            border: none;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+        }
+        .debug-btn:active { background: #2c3e50; }
+    </style>
+</head>
+<body>
+    <div id="distance-debug-overlay">
+        <div id="debug-dist-val" style="font-weight:bold; color:#e74c3c; font-size:14px;">DISTANCE --m</div>
+        <div id="debug-acc-val" style="font-size:10px; opacity:0.7;">GPS Acc: --m</div>
+        <div style="display:flex; gap:4px;">
+            <button class="debug-btn" onclick="playBeep(880, 0.2)">TEST SOUND</button>
+            <button class="debug-btn" onclick="if(navigator.vibrate)navigator.vibrate(200)">TEST VIBE</button>
+        </div>
+    </div>
             .minimize-btn {
                 top: auto;
                 bottom: calc(var(--sidebar-h, 55vh) + 10px);
@@ -1455,9 +1492,6 @@
                     </div>
                 </div>
                 <div class="sync-note">Synchronized on <span id="sync-time">...</span></div>
-                <div id="distance-debug" style="display:none; font-size:10px; color:#e74c3c; font-weight:bold; margin-top:5px; padding:4px; background:#fff1f0; border-radius:4px; text-align:center;">
-                    DEBUG: DISTANCE --m
-                </div>
             </div>
 
             <input type="text" id="search" placeholder="Search paddocks..." style="margin-top:8px;">
@@ -1744,6 +1778,7 @@
                         gpsCircle.setLatLng(latlng);
                         gpsCircle.setRadius(acc);
                     }
+                    currentGPSPos = { lat, lng, accuracy: acc };
                     updateAudioAid(latlng);
                 },
                 function (err) {
@@ -3298,17 +3333,17 @@
         // === Audio Fence Alignment Aid ===
         function toggleBreakAudio(breakId) {
             const bIdStr = String(breakId);
-            const debugEl = document.getElementById('distance-debug');
+            const debugOverlay = document.getElementById('distance-debug-overlay');
             if (activeSoundBreakId === bIdStr) {
                 stopAudioAid();
-                if (debugEl) debugEl.style.display = 'none';
+                if (debugOverlay) debugOverlay.style.display = 'none';
                 return;
             }
             stopAudioAid();
             activeSoundBreakId = bIdStr;
-            if (debugEl) {
-                debugEl.style.display = 'block';
-                debugEl.innerText = 'DEBUG: WAITING FOR GPS...';
+            if (debugOverlay) {
+                debugOverlay.style.display = 'flex';
+                document.getElementById('debug-dist-val').innerText = 'WAITING GPS...';
             }
             console.log("AudioAid set to:", activeSoundBreakId);
             initAudio();
@@ -3345,7 +3380,7 @@
         function updateAudioAid(latlng) {
             if (!activeSoundBreakId || !latlng) return;
             const brk = savedBreaks.find(b => String(b.id) === activeSoundBreakId);
-            const debugEl = document.getElementById('distance-debug');
+            const debugOverlay = document.getElementById('distance-debug-overlay');
             if (!brk) { 
                 console.log("AudioAid: break not found for ID", activeSoundBreakId);
                 stopAudioAid(); 
@@ -3355,11 +3390,12 @@
             const distance = getMinDistanceToFence(latlng, brk);
             const acc = (currentGPSPos && currentGPSPos.accuracy) ? currentGPSPos.accuracy : 0;
             
-            if (debugEl) {
+            if (debugOverlay) {
                 const color = distance <= 10 ? '#27ae60' : '#e74c3c';
-                debugEl.style.background = distance <= 10 ? '#ebfaf0' : '#fff1f0';
-                debugEl.style.color = color;
-                debugEl.innerHTML = `DEBUG: DISTANCE <b>${distance.toFixed(1)}m</b><br><span style="font-size:8px; opacity:0.8;">GPS Acc: ${acc.toFixed(0)}m</span>`;
+                debugOverlay.style.borderColor = color;
+                document.getElementById('debug-dist-val').style.color = color;
+                document.getElementById('debug-dist-val').innerText = `${distance.toFixed(1)}m`;
+                document.getElementById('debug-acc-val').innerText = `GPS Acc: ${acc.toFixed(0)}m`;
             }
             console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m acc=${acc.toFixed(1)}m`);
             
