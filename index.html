@@ -3589,15 +3589,44 @@
             
             if (paddockLayer && paddockLayer.feature) {
                 try {
-                    const paddockBoundary = turf.polygonToLine(paddockLayer.feature);
+                    let rings = [];
+                    const geom = paddockLayer.feature.geometry;
+                    
+                    // Recursively extract all polygon coordinate rings
+                    function recurseCoords(g) {
+                        if (g.type === 'Polygon') {
+                            g.coordinates.forEach(r => rings.push(r));
+                        } else if (g.type === 'MultiPolygon') {
+                            g.coordinates.forEach(poly => poly.forEach(r => rings.push(r)));
+                        } else if (g.type === 'GeometryCollection') {
+                            g.geometries.forEach(sub => recurseCoords(sub));
+                        }
+                    }
+                    if (geom) recurseCoords(geom);
+
+                    const boundaryLines = [];
+                    rings.forEach(ring => {
+                        if (ring.length >= 2) boundaryLines.push(turf.lineString(ring));
+                    });
+
                     for (let i = 0; i < brk.vertices.length; i++) {
                         const j = (i + 1) % brk.vertices.length;
                         const p1 = brk.vertices[i];
                         const p2 = brk.vertices[j];
+                        
+                        // Check midpoint of the drawn segment against all permanent boundary lines
                         const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
                         const pt = turf.point([mid.lng, mid.lat]);
-                        const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
-                        if (dist > ignoreDist) {
+                        let isBoundary = false;
+                        
+                        for (const bLine of boundaryLines) {
+                            if (turf.pointToLineDistance(pt, bLine, { units: 'meters' }) <= ignoreDist) {
+                                isBoundary = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!isBoundary) {
                             fenceSegments.push([p1, p2]);
                         }
                     }
