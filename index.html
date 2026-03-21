@@ -3584,8 +3584,50 @@
                 renderLayer.bindTooltip(`<div style="font-weight:bold; font-size:12px;">${brk.name}</div><div style="font-size:11px; color:${gColor};">${measureStr}</div>`, {
                     permanent: false, direction: 'center', className: 'paddock-label show-label'
                 });
+                
+                renderLayer.on('click', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                    if (breakSelectMode || isDrawingBreak) return; // Don't interrupt drawing or selecting
+                    scrollToBreakCard(brk.id);
+                });
+
                 breakLayers.push(renderLayer);
             });
+        }
+
+        function scrollToBreakCard(breakId) {
+            // Ensure we are in the breaks dashboard
+            if (currentDashboardMode !== 'breaks') {
+                switchDashboardMode('breaks');
+            }
+            
+            // Check if the break is hidden by the current group filter
+            const brk = savedBreaks.find(b => b.id === breakId);
+            if (brk && activeBreakGroup !== 'all' && activeBreakGroup !== (brk.group || '1st')) {
+                setActiveBreakGroup(brk.group || '1st');
+            }
+            
+            // Wait slightly for DOM to update if we switched modes or groups
+            setTimeout(() => {
+                const card = document.getElementById('break-' + breakId);
+                if (card) {
+                    // Open sidebar if it is minimized (mobile)
+                    const sidebar = document.getElementById('sidebar');
+                    if (sidebar && sidebar.classList.contains('minimized')) {
+                        toggleSidebar();
+                    }
+                    
+                    // Smoothly scroll the card into view
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Visually highlight it in the list
+                    document.querySelectorAll('.break-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    
+                    // Also visually focus it on the map
+                    focusBreakOnMap(breakId);
+                }
+            }, 100);
         }
 
         function focusBreakOnMap(breakId) {
