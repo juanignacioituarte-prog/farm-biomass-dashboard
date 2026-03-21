@@ -1455,6 +1455,9 @@
                     </div>
                 </div>
                 <div class="sync-note">Synchronized on <span id="sync-time">...</span></div>
+                <div id="distance-debug" style="display:none; font-size:10px; color:#e74c3c; font-weight:bold; margin-top:5px; padding:4px; background:#fff1f0; border-radius:4px; text-align:center;">
+                    DEBUG: DISTANCE --m
+                </div>
             </div>
 
             <input type="text" id="search" placeholder="Search paddocks..." style="margin-top:8px;">
@@ -3091,9 +3094,11 @@
                 console.log("Saving breaks to cloud...");
                 fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
+                    mode: 'no-cors', // Standard for Google Script Web Apps
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ type: 'breaks', breaks: savedBreaks })
                 })
-                .then(() => console.log("Cloud save complete"))
+                .then(() => console.log("Cloud save request sent (no-cors)"))
                 .catch(e => { console.log('Cloud breaks save failed', e); });
             }
         }
@@ -3295,12 +3300,18 @@
         // === Audio Fence Alignment Aid ===
         function toggleBreakAudio(breakId) {
             const bIdStr = String(breakId);
+            const debugEl = document.getElementById('distance-debug');
             if (activeSoundBreakId === bIdStr) {
                 stopAudioAid();
+                if (debugEl) debugEl.style.display = 'none';
                 return;
             }
             stopAudioAid();
             activeSoundBreakId = bIdStr;
+            if (debugEl) {
+                debugEl.style.display = 'block';
+                debugEl.innerText = 'DEBUG: WAITING FOR GPS...';
+            }
             console.log("AudioAid set to:", activeSoundBreakId);
             initAudio();
             renderBreaksDashboard();
@@ -3336,6 +3347,7 @@
         function updateAudioAid(latlng) {
             if (!activeSoundBreakId || !latlng) return;
             const brk = savedBreaks.find(b => String(b.id) === activeSoundBreakId);
+            const debugEl = document.getElementById('distance-debug');
             if (!brk) { 
                 console.log("AudioAid: break not found for ID", activeSoundBreakId);
                 stopAudioAid(); 
@@ -3344,6 +3356,10 @@
 
             const distance = getMinDistanceToFence(latlng, brk);
             const acc = (currentGPSPos && currentGPSPos.accuracy) ? currentGPSPos.accuracy : 0;
+            
+            if (debugEl) {
+                debugEl.innerText = `DEBUG: DISTANCE ${distance.toFixed(1)}m (Acc: ${acc.toFixed(0)}m)`;
+            }
             console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m acc=${acc.toFixed(1)}m`);
             
             if (distance > 5) {
