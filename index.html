@@ -3356,11 +3356,15 @@
             const acc = (currentGPSPos && currentGPSPos.accuracy) ? currentGPSPos.accuracy : 0;
             
             if (debugEl) {
-                debugEl.innerText = `DEBUG: DISTANCE ${distance.toFixed(1)}m (Acc: ${acc.toFixed(0)}m)`;
+                const color = distance <= 10 ? '#27ae60' : '#e74c3c';
+                debugEl.style.background = distance <= 10 ? '#ebfaf0' : '#fff1f0';
+                debugEl.style.color = color;
+                debugEl.innerHTML = `DEBUG: DISTANCE <b>${distance.toFixed(1)}m</b><br><span style="font-size:8px; opacity:0.8;">GPS Acc: ${acc.toFixed(0)}m</span>`;
             }
             console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m acc=${acc.toFixed(1)}m`);
             
-            if (distance > 5) {
+            const threshold = 10; // Beep starts at 10 meters now
+            if (distance > threshold) {
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 if (oscillator) { stopOsc(); }
                 lastBeepRate = 0;
@@ -3371,8 +3375,9 @@
                 if (navigator.vibrate) navigator.vibrate(200);
                 lastBeepRate = -1; // special state for continuous
             } else {
-                // Beeping (frequency increases as distance decreases: 1Hz to 10Hz)
-                const beepRate = Math.min(10, 1 + (5 - distance) * 2); 
+                // Beeping (frequency increases as distance decreases: 0.5Hz to 10Hz)
+                // Linear scale: 10m -> 0.5Hz, 1m -> 10Hz
+                const beepRate = Math.max(0.5, 0.5 + (threshold - distance) * 1.05); 
                 
                 // Only change interval if rate change is significant (> 10%)
                 if (Math.abs(beepRate - lastBeepRate) > (lastBeepRate * 0.1) || lastBeepRate <= 0) {
@@ -3380,7 +3385,7 @@
                     console.log(`AudioAid: setting beepRate=${beepRate.toFixed(2)}Hz`);
                     
                     playBeep(440, 0.1); 
-                    if (navigator.vibrate) navigator.vibrate(50);
+                    if (navigator.vibrate) try { navigator.vibrate(50); } catch(e){}
                     
                     beepInterval = setInterval(() => {
                         playBeep(440, 0.1);
