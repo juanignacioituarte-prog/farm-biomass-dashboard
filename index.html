@@ -1515,6 +1515,11 @@
                 <div style="font-size:11px; color:#777; margin-bottom:4px;">If a drawn line is within this range of a paddock boundary, it won't beep.</div>
                 <input type="number" id="inp-audio-ignore" value="2" onchange="saveAudioSettings()">
             </div>
+            <div class="input-group" style="margin-bottom:15px;">
+                <label style="font-weight:bold; font-size:12px;">Audio Volume (%)</label>
+                <div style="font-size:11px; color:#777; margin-bottom:4px;">Increase above 100% to force louder beeps. Media volume must also be up.</div>
+                <input type="number" id="inp-audio-vol" value="100" min="10" max="200" onchange="saveAudioSettings()">
+            </div>
             
             <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:6px; font-weight:bold; cursor:pointer; width:100%;">Done</button>
         </div>
@@ -1790,7 +1795,7 @@
                     document.getElementById('btn-gps').classList.remove('active');
                     gpsWatchId = null;
                 },
-                { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
             );
         }
         function parseStrangeDate(dateStr) {
@@ -2316,6 +2321,7 @@
                     
                     document.getElementById('inp-audio-start').value = getBeepStartDistance();
                     document.getElementById('inp-audio-ignore').value = getFenceIgnoreDistance();
+                    document.getElementById('inp-audio-vol').value = getAudioVolume();
                     
                     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
                     return;
@@ -3353,11 +3359,16 @@
         function getFenceIgnoreDistance() {
             return parseFloat(localStorage.getItem('audio_fence_ignore_m')) || 2;
         }
+        function getAudioVolume() {
+            return parseFloat(localStorage.getItem('audio_volume_pct')) || 100;
+        }
         function saveAudioSettings() {
             const startDist = parseFloat(document.getElementById('inp-audio-start').value) || 10;
             const ignoreDist = parseFloat(document.getElementById('inp-audio-ignore').value) || 2;
+            const volPct = parseFloat(document.getElementById('inp-audio-vol').value) || 100;
             localStorage.setItem('audio_beep_start_m', startDist);
             localStorage.setItem('audio_fence_ignore_m', ignoreDist);
+            localStorage.setItem('audio_volume_pct', volPct);
         }
 
         function toggleBreakAudio(breakId) {
@@ -3473,7 +3484,9 @@
                 oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
                 oscillator.start();
             }
-            gainNode.gain.setTargetAtTime(volume * 0.1, audioCtx.currentTime, 0.05);
+            const volPct = getAudioVolume();
+            const gainVal = Math.min(3.0, Math.max(0.01, volPct / 100.0));
+            gainNode.gain.setTargetAtTime(gainVal, audioCtx.currentTime, 0.05);
         }
 
         function playBeep(freq, duration) {
@@ -3484,8 +3497,12 @@
             g.connect(audioCtx.destination);
             osc.type = 'square';
             osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            
+            const volPct = getAudioVolume();
+            const gainVal = Math.min(2.0, Math.max(0.01, volPct / 100.0));
+            g.gain.setValueAtTime(gainVal, audioCtx.currentTime);
             g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
 
