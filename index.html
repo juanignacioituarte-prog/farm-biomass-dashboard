@@ -3265,7 +3265,7 @@
                 };
                 
                 console.log("New break created:", newBreak);
-                savedBreaks.push(newBreak);
+                savedBreaks.unshift(newBreak); // Add to the TOP
                 saveBreaks();
                 cleanupDrawing();
                 renderBreaksDashboard();
@@ -3632,6 +3632,9 @@
         function renderBreaksDashboard() {
             if (currentDashboardMode !== 'breaks') return;
             const list = document.getElementById('list');
+            // Ensure newest is at the top before rendering
+            savedBreaks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
             const groupBreaks = activeBreakGroup === 'all' ? savedBreaks : savedBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
             const count = groupBreaks.length;
 
