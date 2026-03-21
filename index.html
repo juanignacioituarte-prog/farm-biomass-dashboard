@@ -2165,6 +2165,11 @@
             }
 
             switchDashboardMode('manual');
+            
+            // Auto-start GPS tracking
+            setTimeout(() => {
+                if (gpsWatchId === null) toggleGPS();
+            }, 1000);
         }
 
         async function loadGeoJSON() {
@@ -3387,6 +3392,12 @@
             }
             console.log("AudioAid set to:", activeSoundBreakId);
             initAudio();
+            
+            // If we already have a GPS position, update immediately
+            if (currentGPSPos && currentGPSPos.lat && currentGPSPos.lng) {
+                updateAudioAid(L.latLng(currentGPSPos.lat, currentGPSPos.lng));
+            }
+            
             renderBreaksDashboard();
         }
 
