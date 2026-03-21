@@ -3376,6 +3376,29 @@
             localStorage.setItem('audio_volume_pct', volPct);
         }
 
+        let wakeLock = null;
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => {});
+                    console.log('Screen Wake Lock acquired');
+                } catch (err) {
+                    console.error('Wake Lock ERROR:', err.name, err.message);
+                }
+            }
+        }
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => { wakeLock = null; });
+            }
+        }
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible' && activeSoundBreakId) {
+                await requestWakeLock();
+            }
+        });
+
         function toggleBreakAudio(breakId) {
             const bIdStr = String(breakId);
             const debugOverlay = document.getElementById('distance-debug-overlay');
@@ -3392,6 +3415,7 @@
             }
             console.log("AudioAid set to:", activeSoundBreakId);
             initAudio();
+            requestWakeLock();
             
             // If we already have a GPS position, update immediately
             if (currentGPSPos && currentGPSPos.lat && currentGPSPos.lng) {
@@ -3419,6 +3443,7 @@
 
         function stopAudioAid() {
             activeSoundBreakId = null;
+            releaseWakeLock();
             if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
             if (oscillator) {
                 try { oscillator.stop(); } catch(e){}
