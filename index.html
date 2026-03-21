@@ -2280,6 +2280,8 @@
             } else {
                 document.getElementById('map').style.display = 'block';
                 document.getElementById('list').style.display = 'block';
+                document.getElementById('admin-view').style.display = 'none';
+                if (document.getElementById('audio-settings-view')) document.getElementById('audio-settings-view').style.display = 'none';
                 
                 const sidebar = document.getElementById('sidebar');
                 const isMinimized = sidebar.classList.contains('minimized');
