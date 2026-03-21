@@ -1520,6 +1520,11 @@
                 <div style="font-size:11px; color:#777; margin-bottom:4px;">Increase above 100% to force louder beeps. Media volume must also be up.</div>
                 <input type="number" id="inp-audio-vol" value="100" min="10" max="200" onchange="saveAudioSettings()">
             </div>
+            <div class="input-group" style="margin-bottom:15px;">
+                <label style="font-weight:bold; font-size:12px;">Continuous Tone Distance (meters)</label>
+                <div style="font-size:11px; color:#777; margin-bottom:4px;">When closer than this, the beep becomes a solid tone.</div>
+                <input type="number" id="inp-audio-solid" value="1" step="0.5" onchange="saveAudioSettings()">
+            </div>
             
             <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:6px; font-weight:bold; cursor:pointer; width:100%;">Done</button>
         </div>
@@ -2327,6 +2332,7 @@
                     document.getElementById('inp-audio-start').value = getBeepStartDistance();
                     document.getElementById('inp-audio-ignore').value = getFenceIgnoreDistance();
                     document.getElementById('inp-audio-vol').value = getAudioVolume();
+                    document.getElementById('inp-audio-solid').value = getContinuousToneDistance();
                     
                     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
                     return;
@@ -3367,13 +3373,19 @@
         function getAudioVolume() {
             return parseFloat(localStorage.getItem('audio_volume_pct')) || 100;
         }
+        function getContinuousToneDistance() {
+            const val = parseFloat(localStorage.getItem('audio_continuous_m'));
+            return isNaN(val) ? 1 : val;
+        }
         function saveAudioSettings() {
             const startDist = parseFloat(document.getElementById('inp-audio-start').value) || 10;
             const ignoreDist = parseFloat(document.getElementById('inp-audio-ignore').value) || 2;
             const volPct = parseFloat(document.getElementById('inp-audio-vol').value) || 100;
+            const solidDist = parseFloat(document.getElementById('inp-audio-solid').value) || 1;
             localStorage.setItem('audio_beep_start_m', startDist);
             localStorage.setItem('audio_fence_ignore_m', ignoreDist);
             localStorage.setItem('audio_volume_pct', volPct);
+            localStorage.setItem('audio_continuous_m', solidDist);
         }
 
         let wakeLock = null;
@@ -3477,20 +3489,26 @@
             console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m acc=${acc.toFixed(1)}m`);
             
             const threshold = getBeepStartDistance();
+            const continuousDist = getContinuousToneDistance();
+            
             if (distance > threshold) {
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 if (oscillator) { stopOsc(); }
                 lastBeepRate = 0;
-            } else if (distance <= 1) {
+            } else if (distance <= continuousDist) {
                 // Continuous tone
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 playTone(440, 1.0); // A4 continuous
                 if (navigator.vibrate) navigator.vibrate(200);
                 lastBeepRate = -1; // special state for continuous
             } else {
+                if (oscillator && lastBeepRate === -1) { stopOsc(); }
+                
                 // Beeping (frequency increases as distance decreases: 0.5Hz to 10Hz)
-                // Linear scale: 10m -> 0.5Hz, 1m -> 10Hz
-                const beepRate = Math.max(0.5, 0.5 + (threshold - distance) * 1.05); 
+                // Linear scale starting from threshold down to continuousDist
+                const distanceRange = Math.max(0.1, threshold - continuousDist);
+                const progress = (threshold - distance) / distanceRange; // 0 (start) to 1 (close)
+                const beepRate = Math.max(0.5, 0.5 + progress * 9.5);
                 
                 // Only change interval if rate change is significant (> 10%)
                 if (Math.abs(beepRate - lastBeepRate) > (lastBeepRate * 0.1) || lastBeepRate <= 0) {
