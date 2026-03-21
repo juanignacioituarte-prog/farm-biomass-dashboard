@@ -1434,6 +1434,7 @@
                 <button class="btn-dots" onclick="toggleSettingsMenu()">⋮</button>
                 <div id="settings-menu" class="dropdown-menu">
                     <div class="dropdown-item" id="menu-item-admin" style="display:none;" onclick="switchDashboardMode('admin'); toggleSettingsMenu();">Invite Users</div>
+                    <div class="dropdown-item" onclick="switchDashboardMode('audio_settings'); toggleSettingsMenu();">Audio & Map Settings</div>
                     <div class="dropdown-item" onclick="location.reload()">Refresh App</div>
                 </div>
                 <div class="mode-toggle-container" style="flex:1; margin-bottom:0;">
@@ -1497,6 +1498,25 @@
             <div id="auth-email-list" style="display:flex; flex-direction:column; gap:8px;">
                 <!-- Emails will be listed here -->
             </div>
+        </div>
+
+        <div id="audio-settings-view" style="display:none; padding:15px; flex-grow:1; background:#f9f9f9; overflow-y:auto;">
+            <h3 style="margin-top:0;">Audio Aid Settings</h3>
+            <p style="font-size:12px; color:#666; margin-bottom:15px;">Configure distances for the GPS audio guide.</p>
+            
+            <div class="input-group" style="margin-bottom:15px;">
+                <label style="font-weight:bold; font-size:12px;">Beep Start Distance (meters)</label>
+                <div style="font-size:11px; color:#777; margin-bottom:4px;">When approaching a temporary fence, how far away should the beeping start?</div>
+                <input type="number" id="inp-audio-start" value="10" onchange="saveAudioSettings()">
+            </div>
+
+            <div class="input-group" style="margin-bottom:15px;">
+                <label style="font-weight:bold; font-size:12px;">Permanent Fence Ignore Distance (meters)</label>
+                <div style="font-size:11px; color:#777; margin-bottom:4px;">If a drawn line is within this range of a paddock boundary, it won't beep.</div>
+                <input type="number" id="inp-audio-ignore" value="2" onchange="saveAudioSettings()">
+            </div>
+            
+            <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:6px; font-weight:bold; cursor:pointer; width:100%;">Done</button>
         </div>
     </div>
 </div>
@@ -2288,12 +2308,24 @@
                     // Highlight the dots menu temporarily or just deactivate other buttons
                     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
                     return;
+                } else if (mode === 'audio_settings') {
+                    document.getElementById('map').style.display = 'none';
+                    document.getElementById('list').style.display = 'none';
+                    document.getElementById('admin-view').style.display = 'none';
+                    document.getElementById('audio-settings-view').style.display = 'block';
+                    
+                    document.getElementById('inp-audio-start').value = getBeepStartDistance();
+                    document.getElementById('inp-audio-ignore').value = getFenceIgnoreDistance();
+                    
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    return;
                 } else {
                     setLayerMode(currentViewMode);
                 }
             }
 
             document.getElementById('admin-view').style.display = 'none';
+            if (document.getElementById('audio-settings-view')) document.getElementById('audio-settings-view').style.display = 'none';
             renderDashboard();
             updateGeoStyles();
         }
@@ -3315,6 +3347,19 @@
         }
 
         // === Audio Fence Alignment Aid ===
+        function getBeepStartDistance() {
+            return parseFloat(localStorage.getItem('audio_beep_start_m')) || 10;
+        }
+        function getFenceIgnoreDistance() {
+            return parseFloat(localStorage.getItem('audio_fence_ignore_m')) || 2;
+        }
+        function saveAudioSettings() {
+            const startDist = parseFloat(document.getElementById('inp-audio-start').value) || 10;
+            const ignoreDist = parseFloat(document.getElementById('inp-audio-ignore').value) || 2;
+            localStorage.setItem('audio_beep_start_m', startDist);
+            localStorage.setItem('audio_fence_ignore_m', ignoreDist);
+        }
+
         function toggleBreakAudio(breakId) {
             const bIdStr = String(breakId);
             const debugOverlay = document.getElementById('distance-debug-overlay');
@@ -3375,7 +3420,8 @@
             const acc = (currentGPSPos && currentGPSPos.accuracy) ? currentGPSPos.accuracy : 0;
             
             if (debugOverlay) {
-                const color = distance <= 10 ? '#27ae60' : '#e74c3c';
+                const threshold = getBeepStartDistance();
+                const color = distance <= threshold ? '#27ae60' : '#e74c3c';
                 debugOverlay.style.borderColor = color;
                 document.getElementById('debug-dist-val').style.color = color;
                 document.getElementById('debug-dist-val').innerText = `${distance.toFixed(1)}m`;
@@ -3383,7 +3429,7 @@
             }
             console.log(`AudioAid: name=${brk.name} dist=${distance.toFixed(2)}m acc=${acc.toFixed(1)}m`);
             
-            const threshold = 10; // Beep starts at 10 meters now
+            const threshold = getBeepStartDistance();
             if (distance > threshold) {
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 if (oscillator) { stopOsc(); }
@@ -3466,11 +3512,27 @@
         }
 
         function getFenceSegments(brk) {
-            if (brk.cropMode === 'line') return [brk.vertices];
+            if (brk.cropMode === 'line') {
+                if (brk.cropWidthMeters > 0) {
+                    try {
+                        const line = turf.lineString(brk.vertices.map(v => [v.lng, v.lat]));
+                        const off1 = turf.lineOffset(line, brk.cropWidthMeters, { units: 'meters' });
+                        const off2 = turf.lineOffset(line, -brk.cropWidthMeters, { units: 'meters' });
+                        
+                        const seq1 = off1.geometry.coordinates.map(c => ({lat: c[1], lng: c[0]}));
+                        const seq2 = off2.geometry.coordinates.map(c => ({lat: c[1], lng: c[0]}));
+                        return [seq1, seq2];
+                    } catch(e) {
+                        console.error("AudioAid offset failed:", e);
+                    }
+                }
+                return [brk.vertices];
+            }
             if (!brk.vertices || brk.vertices.length < 3) return [];
 
             const fenceSegments = [];
             const paddockLayer = paddockMap[brk.paddock];
+            const ignoreDist = getFenceIgnoreDistance();
             
             if (paddockLayer && paddockLayer.feature) {
                 const paddockBoundary = turf.polygonToLine(paddockLayer.feature);
@@ -3481,7 +3543,7 @@
                     const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
                     const pt = turf.point([mid.lng, mid.lat]);
                     const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
-                    if (dist > 2) {
+                    if (dist > ignoreDist) {
                         fenceSegments.push([p1, p2]);
                     }
                 }
@@ -3553,6 +3615,11 @@
         function renderBreaksOnMap() {
             breakLayers.forEach(l => { if (l) map.removeLayer(l); });
             breakLayers = [];
+            
+            if (!window.audioAidParallelLayers) window.audioAidParallelLayers = [];
+            window.audioAidParallelLayers.forEach(l => { if (l) map.removeLayer(l); });
+            window.audioAidParallelLayers = [];
+
             savedBreaks.forEach(brk => {
                 if (brk.id === editingBreakId) {
                     breakLayers.push(null);
@@ -3573,6 +3640,23 @@
                         color: gColor, weight: 4, opacity: 0.9
                     }).addTo(map);
                     measureStr = brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' m' : '0 m';
+
+                    if (String(brk.id) === activeSoundBreakId && brk.cropWidthMeters > 0) {
+                        try {
+                            const line = turf.lineString(coords.map(c => [c[1], c[0]]));
+                            const off1 = turf.lineOffset(line, brk.cropWidthMeters, { units: 'meters' });
+                            const off2 = turf.lineOffset(line, -brk.cropWidthMeters, { units: 'meters' });
+                            
+                            const c1 = off1.geometry.coordinates.map(c => [c[1], c[0]]);
+                            const c2 = off2.geometry.coordinates.map(c => [c[1], c[0]]);
+                            
+                            const l1 = L.polyline(c1, { color: '#e74c3c', weight: 4, dashArray: '5, 10', opacity: 0.8 }).addTo(map);
+                            const l2 = L.polyline(c2, { color: '#e74c3c', weight: 4, dashArray: '5, 10', opacity: 0.8 }).addTo(map);
+                            window.audioAidParallelLayers.push(l1, l2);
+                        } catch(e) {
+                            console.error("Parallel line generation failed", e);
+                        }
+                    }
                 } else {
                     renderLayer = L.polygon(coords, {
                         color: gColor, weight: 2.5, fillColor: gColor,
