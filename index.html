@@ -3588,17 +3588,21 @@
             const ignoreDist = getFenceIgnoreDistance();
             
             if (paddockLayer && paddockLayer.feature) {
-                const paddockBoundary = turf.polygonToLine(paddockLayer.feature);
-                for (let i = 0; i < brk.vertices.length; i++) {
-                    const j = (i + 1) % brk.vertices.length;
-                    const p1 = brk.vertices[i];
-                    const p2 = brk.vertices[j];
-                    const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
-                    const pt = turf.point([mid.lng, mid.lat]);
-                    const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
-                    if (dist > ignoreDist) {
-                        fenceSegments.push([p1, p2]);
+                try {
+                    const paddockBoundary = turf.polygonToLine(paddockLayer.feature);
+                    for (let i = 0; i < brk.vertices.length; i++) {
+                        const j = (i + 1) % brk.vertices.length;
+                        const p1 = brk.vertices[i];
+                        const p2 = brk.vertices[j];
+                        const mid = { lat: (p1.lat + p2.lat) / 2, lng: (p1.lng + p2.lng) / 2 };
+                        const pt = turf.point([mid.lng, mid.lat]);
+                        const dist = turf.pointToLineDistance(pt, paddockBoundary, { units: 'meters' });
+                        if (dist > ignoreDist) {
+                            fenceSegments.push([p1, p2]);
+                        }
                     }
+                } catch(e) {
+                    console.error("AudioAid permanent fence check failed:", e);
                 }
             }
 
