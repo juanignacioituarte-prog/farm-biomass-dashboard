@@ -3089,16 +3089,14 @@
             // Save locally immediately
             localStorage.setItem('farm_breaks', JSON.stringify(savedBreaks));
 
-            // Save to cloud in background
+            // Save to cloud in background - Simple POST (avoid preflight)
             if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.length > 5) {
                 console.log("Saving breaks to cloud...");
                 fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // Standard for Google Script Web Apps
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ type: 'breaks', breaks: savedBreaks })
                 })
-                .then(() => console.log("Cloud save request sent (no-cors)"))
+                .then(res => console.log("Cloud save res:", res.status))
                 .catch(e => { console.log('Cloud breaks save failed', e); });
             }
         }
@@ -3635,7 +3633,7 @@
             // Calculate avg area/day globally (excluding crops)
             const now = new Date();
             const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const recentBreaksAll = savedBreaks.filter(b => b.group !== 'crops' && new Date(b.createdAt) >= sevenDaysAgo);
+            const recentBreaksAll = savedBreaks.filter(b => b.group !== 'crops' && b.createdAt && new Date(b.createdAt) >= sevenDaysAgo);
             const recentAreaAll = recentBreaksAll.reduce((sum, b) => sum + b.areaHa, 0);
             const daysWithBreaks = new Set(recentBreaksAll.map(b => new Date(b.createdAt).toDateString())).size;
             const avgAreaPerDay = daysWithBreaks > 0 ? (recentAreaAll / daysWithBreaks) : 0;
@@ -3662,7 +3660,11 @@
                 const isActive = g.id === activeBreakGroup;
                 const borderStyle = isActive ? '#000' : 'transparent';
                 const weight = isActive ? 'bold' : 'normal';
-                html += `<button style="flex:1; min-width:65px; padding:6px 2px; font-size:10px; font-weight:${weight}; cursor:pointer; background:${g.color}; border:2px solid ${borderStyle}; color:#fff; border-radius:6px; transition:0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.1);" onclick="setActiveBreakGroup('${g.id}')">${g.name}</button>`;
+                const gCount = g.id === 'all' ? savedBreaks.length : savedBreaks.filter(b => (b.group || '1st') === g.id).length;
+                
+                html += `<button style="flex:1; min-width:65px; padding:6px 2px; font-size:10px; font-weight:${weight}; cursor:pointer; background:${g.color}; border:2px solid ${borderStyle}; color:#fff; border-radius:6px; transition:0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.1);" onclick="setActiveBreakGroup('${g.id}')">
+                    ${g.name}<br><span style="font-size:8px; opacity:0.8;">(${gCount})</span>
+                </button>`;
             });
             html += '</div>';
 
@@ -3682,138 +3684,153 @@
                 html += `<button class="btn-delete-selected" onclick="deleteSelectedBreaks()">\u2715 DELETE SELECTED (${selectedBreakIds.size})</button>`;
             }
 
-            const recentBreaksGroup = groupBreaks.filter(b => new Date(b.createdAt) >= sevenDaysAgo);
+            const recentBreaksGroup = groupBreaks.filter(b => b.createdAt && new Date(b.createdAt) >= sevenDaysAgo);
+            const olderBreaksGroup = groupBreaks.filter(b => !b.createdAt || new Date(b.createdAt) < sevenDaysAgo);
 
-            if (recentBreaksGroup.length === 0) {
-                html += `<div class="break-empty"><span class="break-empty-icon">\ud83d\udcd0</span>No recent breaks created (last 7 days).<br>Click the button above to draw your first break on the map.</div>`;
+            if (groupBreaks.length === 0) {
+                html += `<div class="break-empty"><span class="break-empty-icon">\ud83d\udcd0</span>No breaks found in this group.<br>Click the button above to draw your first break on the map.</div>`;
             }
-            [...recentBreaksGroup].reverse().forEach(brk => {
-                const isLineMode = brk.cropMode === 'line';
-                
-                const measureStr = isLineMode 
-                    ? (brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' meters' : '0 meters')
-                    : (brk.areaHa >= 1 ? brk.areaHa.toFixed(2) + ' ha' : Math.round(brk.areaSqm) + ' m\u00b2');
-                const created = new Date(brk.createdAt);
-                const dateStr = created.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
-                const timeStr = created.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' });
-                const isSelected = selectedBreakIds.has(brk.id);
-                const isAudioActive = activeSoundBreakId === brk.id;
-                
-                const cardClick = breakSelectMode
-                    ? `toggleBreakSelection('${brk.id}', event)`
-                    : `focusBreakOnMap('${brk.id}'); document.querySelectorAll('.break-card').forEach(c=>c.classList.remove('active')); this.classList.add('active');`;
-                const gColor = getGroupColor(brk.group);
 
-                let secondaryMetricHtml = '';
-                if (isLineMode) {
-                    const wid = brk.cropWidthMeters || 0;
-                    secondaryMetricHtml = `
-                        <span class="label">REQ. FENCE WIDTH</span>
-                        <div style="font-size:13px; font-weight:600; color:#d35400;">${wid > 0 ? wid.toFixed(1) + ' m' : '--'}</div>
-                        <div style="font-size:10px; color:#95a5a6; margin-top:2px;">calculated</div>`;
-                } else {
-                    let valStr = '--';
-                    let calcParamsText = 'No calculation data available';
+            if (recentBreaksGroup.length > 0) {
+                if (olderBreaksGroup.length > 0) html += `<div style="font-size:10px; font-weight:bold; color:#7f8c8d; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">Recently Created</div>`;
+                [...recentBreaksGroup].reverse().forEach(brk => {
+                    html += renderBreakCardHtml(brk);
+                });
+            }
+
+            if (olderBreaksGroup.length > 0) {
+                html += `<div style="font-size:10px; font-weight:bold; color:#7f8c8d; margin:15px 0 10px; text-transform:uppercase; letter-spacing:0.5px;">Earlier Breaks</div>`;
+                [...olderBreaksGroup].reverse().forEach(brk => {
+                    html += renderBreakCardHtml(brk);
+                });
+            }
+            list.innerHTML = html;
+        }
+
+        function renderBreakCardHtml(brk) {
+            const isLineMode = brk.cropMode === 'line';
+            const measureStr = isLineMode 
+                ? (brk.distanceMeters ? brk.distanceMeters.toFixed(0) + ' meters' : '0 meters')
+                : (brk.areaHa >= 1 ? brk.areaHa.toFixed(2) + ' ha' : Math.round(brk.areaSqm) + ' m\u00b2');
+            const created = new Date(brk.createdAt);
+            const dateStr = created.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+            const timeStr = created.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' });
+            const isSelected = selectedBreakIds.has(brk.id);
+            const isAudioActive = activeSoundBreakId === brk.id;
+            
+            const cardClick = breakSelectMode
+                ? `toggleBreakSelection('${brk.id}', event)`
+                : `focusBreakOnMap('${brk.id}'); document.querySelectorAll('.break-card').forEach(c=>c.classList.remove('active')); this.classList.add('active');`;
+
+            let secondaryMetricHtml = '';
+            if (isLineMode) {
+                const wid = brk.cropWidthMeters || 0;
+                secondaryMetricHtml = `
+                    <span class="label">REQ. FENCE WIDTH</span>
+                    <div style="font-size:13px; font-weight:600; color:#d35400;">${wid > 0 ? wid.toFixed(1) + ' m' : '--'}</div>
+                    <div style="font-size:10px; color:#95a5a6; margin-top:2px;">calculated</div>`;
+            } else {
+                let valStr = '--';
+                let calcParamsText = 'No calculation data available';
+                
+                let paddockName = brk.paddock;
+                if (!paddockName && brk.vertices && brk.vertices.length > 0) {
+                    let centerLat = 0, centerLng = 0;
+                    brk.vertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
+                    centerLat /= brk.vertices.length;
+                    centerLng /= brk.vertices.length;
+                    paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
+                }
+                const p = satellitePaddockData.find(pd => pd && pd.name === paddockName);
+                if (p && p.latest) {
+                    const createdTs = new Date(brk.createdAt).getTime();
+                    const imgTs = p.latest.dateObj ? p.latest.dateObj.getTime() : selectedSceneTs;
                     
-                    let paddockName = brk.paddock;
-                    if (!paddockName && brk.vertices && brk.vertices.length > 0) {
-                        let centerLat = 0, centerLng = 0;
-                        brk.vertices.forEach(v => { centerLat += v.lat; centerLng += v.lng; });
-                        centerLat /= brk.vertices.length;
-                        centerLng /= brk.vertices.length;
-                        paddockName = getPaddockFromPoint({ lat: centerLat, lng: centerLng });
-                    }
-                    const p = satellitePaddockData.find(pd => pd && pd.name === paddockName);
-                    if (p && p.latest) {
-                        const createdTs = new Date(brk.createdAt).getTime();
-                        const imgTs = p.latest.dateObj ? p.latest.dateObj.getTime() : selectedSceneTs;
-                        
-                        if (imgTs) {
-                            const daysSince = (createdTs - imgTs) / 86400000;
-                            // Calculate Satellite mode GROWTH rate
-                            let tWGrowth = 0, tAreaG = 0;
-                            satellitePaddockData.forEach(sp => {
-                                if (sp.area > 0 && !sp.isOut && sp.growthRate && sp.growthRate > 0) {
-                                    tWGrowth += (sp.growthRate * sp.area);
-                                    tAreaG += sp.area;
-                                }
-                            });
-                            const grower = tAreaG > 0 ? Math.round(tWGrowth / tAreaG) : 0;
-                            const baseCover = parseFloat(p.latest.cover) || 0;
-                            const estimatedCover = baseCover + (grower * daysSince);
-                            const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
-                            const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
-                            const cowNum = savedHerdCows[brk.group] || 0;
-
-                            if (cowNum > 0) {
-                                const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
-                                valStr = (totalKg / cowNum).toFixed(1) + ' kg';
-                                
-                                calcParamsText = `Paddock: ${paddockName || 'Unknown'}\n` +
-                                    `Base Cover: ${baseCover.toFixed(0)} kgDM/ha\n` +
-                                    `Growth: ${grower.toFixed(1)} kgDM/ha/day\n` +
-                                    `Days Since Image: ${daysSince.toFixed(1)} days\n` +
-                                    `Est. Cover: ${estimatedCover.toFixed(0)} kgDM/ha\n` +
-                                    `Residual: ${residual} kgDM/ha\n` +
-                                    `Area: ${brk.areaHa.toFixed(2)} ha\n` +
-                                    `Cows: ${cowNum}`;
-                            } else {
-                                calcParamsText = 'Cow number not set for group';
+                    if (imgTs) {
+                        const daysSince = (createdTs - imgTs) / 86400000;
+                        // Calculate Satellite mode GROWTH rate
+                        let tWGrowth = 0, tAreaG = 0;
+                        satellitePaddockData.forEach(sp => {
+                            if (sp.area > 0 && !sp.isOut && sp.growthRate && sp.growthRate > 0) {
+                                tWGrowth += (sp.growthRate * sp.area);
+                                tAreaG += sp.area;
                             }
+                        });
+                        const grower = tAreaG > 0 ? Math.round(tWGrowth / tAreaG) : 0;
+                        const baseCover = parseFloat(p.latest.cover) || 0;
+                        const estimatedCover = baseCover + (grower * daysSince);
+                        const residual = parseFloat(localStorage.getItem('feed_residual')) || 1500;
+                        const savedHerdCows = JSON.parse(localStorage.getItem('herd_cow_numbers') || '{}');
+                        const cowNum = savedHerdCows[brk.group] || 0;
+
+                        if (cowNum > 0) {
+                            const totalKg = Math.max(0, estimatedCover - residual) * brk.areaHa;
+                            valStr = (totalKg / cowNum).toFixed(1) + ' kg';
+                            
+                            calcParamsText = `Paddock: ${paddockName || 'Unknown'}\n` +
+                                `Base Cover: ${baseCover.toFixed(0)} kgDM/ha\n` +
+                                `Growth: ${grower.toFixed(1)} kgDM/ha/day\n` +
+                                `Days Since Image: ${daysSince.toFixed(1)} days\n` +
+                                `Est. Cover: ${estimatedCover.toFixed(0)} kgDM/ha\n` +
+                                `Residual: ${residual} kgDM/ha\n` +
+                                `Area: ${brk.areaHa.toFixed(2)} ha\n` +
+                                `Cows: ${cowNum}`;
+                        } else {
+                            calcParamsText = 'Cow number not set for group';
                         }
                     }
-
-                    secondaryMetricHtml = `
-                        <div title="${calcParamsText}" style="cursor:help; display:inline-block;">
-                            <span class="label">EST. KG/COW</span>
-                            <div style="font-size:13px; font-weight:600; color:var(--accent);">
-                                ${valStr}
-                            </div>
-                            <div style="font-size:10px; color:#95a5a6; margin-top:2px;">per cow</div>
-                        </div>`;
                 }
 
-
-                html += `<div class="break-card ${isSelected ? 'selected' : ''} ${isAudioActive ? 'audio-active' : ''}" id="break-${brk.id}" onclick="${cardClick}" style="border-left: 4px solid ${gColor};">
-                        ${breakSelectMode
-                        ? `<input type="checkbox" class="break-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleBreakSelection('${brk.id}', event)" style="position:absolute; top:14px; right:10px;" />`
-                        : `<div style="position:absolute; top:10px; right:10px; display:flex; gap:6px;">
-                             <button class="btn-audio-aid ${isAudioActive ? 'active' : ''}" 
-                                     onclick="event.stopPropagation(); toggleBreakAudio('${brk.id}'); if ('vibrate' in navigator) navigator.vibrate(50);" 
-                                     title="${isAudioActive ? 'Stop Audio Aid' : 'Start Audio Aid'}">
-                                 ${isAudioActive ? '\u23f9\ufe0f' : '\u25b6\ufe0f'}
-                             </button>
-                             <button class="btn-edit-break" style="position:static;" onclick="event.stopPropagation(); startEditBreak('${brk.id}')" title="Edit vertices">\u270e</button>
-                             <button class="btn-delete-break" style="position:static;" onclick="promptDeleteBreak('${brk.id}', event)" title="Delete break">\ud83d\uddd1\ufe0f</button>
-                           </div>`
-                    }
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-right:50px;">
-                            <input class="break-name-input" value="${brk.name}" onchange="renameBreak('${brk.id}', this.value)" onclick="event.stopPropagation()" />
+                secondaryMetricHtml = `
+                    <div title="${calcParamsText}" style="cursor:help; display:inline-block;">
+                        <span class="label">EST. KG/COW</span>
+                        <div style="font-size:13px; font-weight:600; color:var(--accent);">
+                            ${valStr}
                         </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
-                            <div>
-                                <span class="label">${isLineMode ? 'FACE LENGTH' : 'AREA'}</span>
-                                <span class="break-area-val">${measureStr}</span>
-                                ${isLineMode ? '' : (brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`)}
-                            </div>
-                            <div>
-                                ${secondaryMetricHtml}
-                            </div>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                            <input class="break-name-input" type="text" placeholder="Add comment..." value="${brk.comment || ''}" onchange="updateBreakComment('${brk.id}', this.value)" onclick="event.stopPropagation()" style="flex:1; font-size: 11px; font-weight: normal; color: #555; background: #fdfdfd; border: 1px solid #eee; padding: 4px 6px; border-radius:3px;">
-                            <div style="font-size:10px; color:#bbb; margin-left:10px; font-weight:bold; text-align:right;">
-                                ${(() => {
-                                    const user = brk.lastEditedBy || brk.createdBy || '???';
-                                    const firstName = user.toUpperCase().split(' ')[0];
-                                    const status = brk.lastEditedBy ? 'EDITED' : 'CREATED';
-                                    return `${firstName} ${status}`;
-                                })()}
-                            </div>
-                        </div>
+                        <div style="font-size:10px; color:#95a5a6; margin-top:2px;">per cow</div>
                     </div>`;
-            });
-            list.innerHTML = html;
+            }
+            
+            const gColor = getGroupColor(brk.group);
+            
+            return `<div class="break-card ${isSelected ? 'selected' : ''} ${isAudioActive ? 'audio-active' : ''}" id="break-${brk.id}" onclick="${cardClick}" style="border-left: 4px solid ${gColor};">
+                    ${breakSelectMode
+                    ? `<input type="checkbox" class="break-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleBreakSelection('${brk.id}', event)" style="position:absolute; top:14px; right:10px;" />`
+                    : `<div style="position:absolute; top:10px; right:10px; display:flex; gap:6px;">
+                         <button class="btn-audio-aid ${isAudioActive ? 'active' : ''}" 
+                                 onclick="event.stopPropagation(); toggleBreakAudio('${brk.id}'); if ('vibrate' in navigator) navigator.vibrate(50);" 
+                                 title="${isAudioActive ? 'Stop Audio Aid' : 'Start Audio Aid'}">
+                             ${isAudioActive ? '\u23f9\ufe0f' : '\u25b6\ufe0f'}
+                         </button>
+                         <button class="btn-edit-break" style="position:static;" onclick="event.stopPropagation(); startEditBreak('${brk.id}')" title="Edit vertices">\u270e</button>
+                         <button class="btn-delete-break" style="position:static;" onclick="promptDeleteBreak('${brk.id}', event)" title="Delete break">\ud83d\uddd1\ufe0f</button>
+                       </div>`
+                }
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-right:50px;">
+                        <input class="break-name-input" value="${brk.name}" onchange="renameBreak('${brk.id}', this.value)" onclick="event.stopPropagation()" />
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+                        <div>
+                            <span class="label">${isLineMode ? 'FACE LENGTH' : 'AREA'}</span>
+                            <span class="break-area-val">${measureStr}</span>
+                            ${isLineMode ? '' : (brk.areaHa >= 1 ? `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${Math.round(brk.areaSqm).toLocaleString()} m\u00b2</div>` : `<div style="font-size:10px; color:#95a5a6; margin-top:2px;">${brk.areaHa.toFixed(4)} ha</div>`)}
+                        </div>
+                        <div>
+                            ${secondaryMetricHtml}
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                        <input class="break-name-input" type="text" placeholder="Add comment..." value="${brk.comment || ''}" onchange="updateBreakComment('${brk.id}', this.value)" onclick="event.stopPropagation()" style="flex:1; font-size: 11px; font-weight: normal; color: #555; background: #fdfdfd; border: 1px solid #eee; padding: 4px 6px; border-radius:3px;">
+                        <div style="font-size:10px; color:#bbb; margin-left:10px; font-weight:bold; text-align:right;">
+                            ${(() => {
+                                const user = brk.lastEditedBy || brk.createdBy || '???';
+                                const firstName = user.toUpperCase().split(' ')[0];
+                                const status = brk.lastEditedBy ? 'EDITED' : 'CREATED';
+                                return `${firstName} ${status}`;
+                            })()}
+                        </div>
+                    </div>
+                </div>`;
         }
 
         /* ===================== BREAK EDITING ===================== */
