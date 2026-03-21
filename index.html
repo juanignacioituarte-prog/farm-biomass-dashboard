@@ -3695,6 +3695,13 @@
             if (groupBreaks.length === 0) {
                 html += `<div class="break-empty"><span class="break-empty-icon">\ud83d\udcd0</span>No breaks found in this group.<br>Click the button above to draw your first break on the map.</div>`;
             } else {
+                // EXPLICIT SORT right before render
+                groupBreaks.sort((a, b) => {
+                    const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return db - da; // Newest first
+                });
+                console.log("Rendering breaks in group, newest first. Total:", groupBreaks.length);
                 groupBreaks.forEach(brk => {
                     html += renderBreakCardHtml(brk);
                 });
