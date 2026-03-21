@@ -3693,14 +3693,14 @@
 
             if (recentBreaksGroup.length > 0) {
                 if (olderBreaksGroup.length > 0) html += `<div style="font-size:10px; font-weight:bold; color:#7f8c8d; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">Recently Created</div>`;
-                [...recentBreaksGroup].reverse().forEach(brk => {
+                recentBreaksGroup.forEach(brk => {
                     html += renderBreakCardHtml(brk);
                 });
             }
 
             if (olderBreaksGroup.length > 0) {
                 html += `<div style="font-size:10px; font-weight:bold; color:#7f8c8d; margin:15px 0 10px; text-transform:uppercase; letter-spacing:0.5px;">Earlier Breaks</div>`;
-                [...olderBreaksGroup].reverse().forEach(brk => {
+                olderBreaksGroup.forEach(brk => {
                     html += renderBreakCardHtml(brk);
                 });
             }
