@@ -2378,14 +2378,34 @@
                     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
                     return;
                 } else if (mode === 'weekly_report') {
-                    document.getElementById('map').style.display = 'none';
+                    document.getElementById('map').style.display = 'block';
                     document.getElementById('list').style.display = 'none';
                     document.getElementById('admin-view').style.display = 'none';
                     if (document.getElementById('audio-settings-view')) document.getElementById('audio-settings-view').style.display = 'none';
                     document.getElementById('weekly-report-view').style.display = 'block';
                     
+                    const sidebar = document.getElementById('sidebar');
+                    const isMinimized = sidebar.classList.contains('minimized');
+                    
+                    if (window.innerWidth <= 768) {
+                        const sideH = isMinimized ? '0px' : '55vh';
+                        sidebar.style.height = sideH;
+                        sidebar.style.width = '100%';
+                        document.documentElement.style.setProperty('--sidebar-h', sideH);
+                    } else {
+                        sidebar.style.width = isMinimized ? '40px' : '380px';
+                        sidebar.style.height = '100%';
+                    }
+                    setTimeout(() => map.invalidateSize(), 50);
+                    
                     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    setLayerMode(currentViewMode);
+                    document.getElementById('legend').style.display = 'none';
+                    updateGeoStyles();
+                    
+                    weeklyFilterRange = null;
                     renderWeeklyReport();
+                    renderBreaksOnMap();
                     return;
                 } else {
                     setLayerMode(currentViewMode);
@@ -2845,14 +2865,27 @@
 
         function clearWeeklyFilter() {
             weeklyFilterRange = null;
-            renderBreaksDashboard();
+            if (currentDashboardMode === 'breaks') renderBreaksDashboard();
+            if (currentDashboardMode === 'weekly_report') renderWeeklyReport();
+            
             renderBreaksOnMap();
+            
+            setTimeout(() => {
+                let validBounds = null;
+                breakLayers.forEach(l => {
+                    if (l) { try { const bnd = l.getBounds(); if (validBounds) validBounds.extend(bnd); else validBounds = bnd; } catch (e) {} }
+                });
+                if (validBounds && validBounds.isValid()) map.fitBounds(validBounds, { padding: [40, 40] });
+            }, 300);
         }
 
         function viewWeeklyReportBreaks(startTs, endTs) {
             weeklyFilterRange = { start: startTs, end: endTs };
-            if (document.getElementById('weekly-report-view')) document.getElementById('weekly-report-view').style.display = 'none';
-            switchDashboardMode('breaks');
+            
+            if (currentDashboardMode === 'breaks') renderBreaksDashboard();
+            if (currentDashboardMode === 'weekly_report') renderWeeklyReport();
+            
+            renderBreaksOnMap();
             
             setTimeout(() => {
                 let validBounds = null;
@@ -4205,19 +4238,32 @@
                 container.innerHTML = '<p style="font-size:12px; color:#95a5a6;">No break data available yet.</p>';
             } else {
                 let html = '<div style="background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); overflow:hidden;">';
+                
+                // Show a clear filter option at the top if there breaks active
+                if (weeklyFilterRange) {
+                    html += `<div style="background:#ff9800; padding:8px 15px; cursor:pointer;" onclick="clearWeeklyFilter()">
+                                <div style="color:white; font-size:12px; font-weight:bold; text-align:center;">\u2715 Clear Map Filter & View All Breaks</div>
+                             </div>`;
+                }
+                
                 sortedKeys.forEach(k => {
                     const w = weeks[k];
                     const p1 = w.start.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' });
                     const p2 = new Date(w.end.getTime() - 86400000).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric', year: 'numeric' });
                     
-                    html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 15px; border-bottom:1px solid #f0f0f0; cursor:pointer;" onclick="viewWeeklyReportBreaks(${w.start.getTime()}, ${w.end.getTime()})">
+                    const isActive = weeklyFilterRange && weeklyFilterRange.start >= w.start.getTime() && weeklyFilterRange.end <= w.end.getTime();
+                    const bg = isActive ? '#fff3e0' : 'transparent';
+                    const border = isActive ? '2px solid #ff9800' : '1px solid #f0f0f0';
+                    const pad = isActive ? '11px 14px' : '12px 15px';
+                    
+                    html += `<div style="background:${bg}; display:flex; justify-content:space-between; align-items:center; padding:${pad}; border-bottom:${border}; cursor:pointer; transition:background 0.2s;" onclick="viewWeeklyReportBreaks(${w.start.getTime()}, ${w.end.getTime()})">
                         <div>
                             <div style="font-weight:bold; color:#2c3e50; font-size:14px;">${p1} - ${p2}</div>
                             <div style="font-size:11px; color:#95a5a6; margin-top:3px;">${w.breakCount} break${w.breakCount!==1?'s':''}</div>
                         </div>
                         <div style="text-align:right;">
                             <div style="font-weight:bold; color:var(--accent); font-size:18px;">${w.totalArea.toFixed(2)} <span style="font-size:11px; font-weight:normal; color:#7f8c8d;">ha</span></div>
-                            <div style="font-size:10px; color:#3498db; margin-top:2px;">Tap to view map ➔</div>
+                            <div style="font-size:10px; color:${isActive ? '#e67e22' : '#3498db'}; margin-top:2px;">${isActive ? 'Viewing \u2714' : 'Tap to map ➔'}</div>
                         </div>
                     </div>`;
                 });
