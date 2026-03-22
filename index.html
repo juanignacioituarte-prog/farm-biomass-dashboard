@@ -1688,6 +1688,7 @@
         function normName(s) { return (s || "").trim().toLowerCase(); }
 
         function getPaddockFromPoint(latlngRaw) {
+            if (!latlngRaw) return null;
             let foundPaddock = null;
             if (!geoLayer) return null;
             const ptX = latlngRaw.lng, ptY = latlngRaw.lat;
@@ -2892,9 +2893,12 @@
             
             // Robust event support (Leaflet e vs raw DOM ev)
             const ev = e.originalEvent || e;
-            const containerPoint = e.containerPoint || map.mouseEventToContainerPoint(ev);
-            const latlng = e.latlng || map.mouseEventToLatLng(ev);
+            const touch = ev.touches ? ev.touches[0] : ev; 
+
+            const containerPoint = e.containerPoint || map.mouseEventToContainerPoint(touch);
+            const latlng = e.latlng || map.mouseEventToLatLng(touch);
             
+            if (!latlng) return;
             mapHoldStartPos = containerPoint;
             
             const pName = getPaddockFromPoint(latlng);
