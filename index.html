@@ -4239,13 +4239,12 @@
             } else {
                 let html = '<div style="background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); overflow:hidden;">';
                 
-                // Show a clear filter option at the top if there breaks active
                 if (weeklyFilterRange) {
                     html += `<div style="background:#ff9800; padding:8px 15px; cursor:pointer;" onclick="clearWeeklyFilter()">
                                 <div style="color:white; font-size:12px; font-weight:bold; text-align:center;">\u2715 Clear Map Filter & View All Breaks</div>
                              </div>`;
                 }
-                
+
                 sortedKeys.forEach(k => {
                     const w = weeks[k];
                     const p1 = w.start.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' });
