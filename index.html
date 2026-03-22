@@ -1753,14 +1753,11 @@
             }, 500);
         }
 
-        function toggleGPS() {
+        function toggleGPS(isAuto = false) {
             if (gpsWatchId !== null) {
-                // Stop tracking
-                navigator.geolocation.clearWatch(gpsWatchId);
-                gpsWatchId = null;
-                if (gpsMarker) { map.removeLayer(gpsMarker); gpsMarker = null; }
-                if (gpsCircle) { map.removeLayer(gpsCircle); gpsCircle = null; }
-                document.getElementById('btn-gps').classList.remove('active');
+                if (!isAuto && currentGPSPos && currentGPSPos.lat) {
+                    map.setView([currentGPSPos.lat, currentGPSPos.lng], 17);
+                }
                 return;
             }
             if (!navigator.geolocation) {
@@ -1786,7 +1783,11 @@
                             fillColor: '#3498db', fillOpacity: 0.1,
                             className: 'gps-pulse'
                         }).addTo(map);
-                        map.setView(latlng, 17);
+                        
+                        const distToFarm = latlng.distanceTo(L.latLng(-42.679, 172.879));
+                        if (!isAuto || distToFarm < 6000) {
+                            map.setView(latlng, 17);
+                        }
                     } else {
                         gpsMarker.setLatLng(latlng);
                         gpsCircle.setLatLng(latlng);
@@ -2173,7 +2174,7 @@
             
             // Auto-start GPS tracking
             setTimeout(() => {
-                if (gpsWatchId === null) toggleGPS();
+                if (gpsWatchId === null) toggleGPS(true);
             }, 1000);
         }
 
