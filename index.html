@@ -2891,12 +2891,10 @@
         function handleMapHoldStart(e) {
             if (!isDrawingBreak || currentDrawingMode !== 'polygon') return;
             
-            // Robust event support (Leaflet e vs raw DOM ev)
+            // Pointer events are the most modern and robust
             const ev = e.originalEvent || e;
-            const touch = ev.touches ? ev.touches[0] : ev; 
-
-            const containerPoint = e.containerPoint || map.mouseEventToContainerPoint(touch);
-            const latlng = e.latlng || map.mouseEventToLatLng(touch);
+            const containerPoint = e.containerPoint || map.mouseEventToContainerPoint(ev);
+            const latlng = e.latlng || map.mouseEventToLatLng(ev);
             
             if (!latlng) return;
             mapHoldStartPos = containerPoint;
@@ -2906,7 +2904,7 @@
                 mapHoldPaddock = pName;
                 
                 // VIBRATE to confirm "Hold Started"
-                if (navigator.vibrate) navigator.vibrate(50);
+                if (navigator.vibrate) navigator.vibrate(200);
                 
                 // Visual feedback: white high-opacity highlight
                 paddockMap[pName].setStyle({ fillColor: 'white', fillOpacity: 0.6, weight: 4 });
@@ -2926,7 +2924,7 @@
             if (!mapHoldTimer || !mapHoldStartPos) return;
             const ev = e.originalEvent || e;
             const pos = e.containerPoint || map.mouseEventToContainerPoint(ev);
-            // Increase slop to 40px for natural wobble
+            // Increase slop for natural wobble
             if (mapHoldStartPos.distanceTo(pos) > 40) {
                 cancelMapHold();
             }
@@ -3558,14 +3556,13 @@
             
             // Native DOM listeners in CAPTURE phase to bypass Leaflet layer suppression
             const cont = map.getContainer();
-            cont.addEventListener('mousedown', handleMapHoldStart, true);
-            cont.addEventListener('touchstart', handleMapHoldStart, { capture: true, passive: false });
-            cont.addEventListener('mousemove', handleMapHoldMove, true);
-            cont.addEventListener('touchmove', handleMapHoldMove, { capture: true, passive: false });
-            cont.addEventListener('mouseup', cancelMapHold, true);
-            cont.addEventListener('mouseleave', cancelMapHold, true);
-            cont.addEventListener('touchend', cancelMapHold, true);
-            cont.addEventListener('touchcancel', cancelMapHold, true);
+            cont.style.touchAction = 'none'; // CRITICAL: Stop browser from stealing long-press/panning
+            
+            cont.addEventListener('pointerdown', handleMapHoldStart, true);
+            cont.addEventListener('pointermove', handleMapHoldMove, true);
+            cont.addEventListener('pointerup', cancelMapHold, true);
+            cont.addEventListener('pointerleave', cancelMapHold, true);
+            cont.addEventListener('pointercancel', cancelMapHold, true);
         }
 
         let ignoreNextMapClickTimeout = 0;
@@ -3664,14 +3661,13 @@
             map.off('click', onMapClickForBreak);
             
             const cont = map.getContainer();
-            cont.removeEventListener('mousedown', handleMapHoldStart, true);
-            cont.removeEventListener('touchstart', handleMapHoldStart, true);
-            cont.removeEventListener('mousemove', handleMapHoldMove, true);
-            cont.removeEventListener('touchmove', handleMapHoldMove, true);
-            cont.removeEventListener('mouseup', cancelMapHold, true);
-            cont.removeEventListener('mouseleave', cancelMapHold, true);
-            cont.removeEventListener('touchend', cancelMapHold, true);
-            cont.removeEventListener('touchcancel', cancelMapHold, true);
+            cont.style.touchAction = '';
+            
+            cont.removeEventListener('pointerdown', handleMapHoldStart, true);
+            cont.removeEventListener('pointermove', handleMapHoldMove, true);
+            cont.removeEventListener('pointerup', cancelMapHold, true);
+            cont.removeEventListener('pointerleave', cancelMapHold, true);
+            cont.removeEventListener('pointercancel', cancelMapHold, true);
 
             cancelMapHold();
             setBreakFullscreen(false);
