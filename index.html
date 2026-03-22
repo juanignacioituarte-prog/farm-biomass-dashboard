@@ -3548,12 +3548,20 @@
             document.getElementById('btn-finish-break').disabled = true;
             document.getElementById('vertex-count').textContent = '0 points';
             map.getContainer().style.cursor = 'crosshair';
+            
+            // Standard Leaflet click
             map.on('click', onMapClickForBreak);
-            map.on('mousedown', handleMapHoldStart);
-            map.on('touchstart', handleMapHoldStart);
-            map.on('mousemove', handleMapHoldMove);
-            map.on('touchmove', handleMapHoldMove);
-            map.on('mouseup mouseleave touchend touchcancel', cancelMapHold);
+            
+            // Native DOM listeners in CAPTURE phase to bypass Leaflet layer suppression
+            const cont = map.getContainer();
+            cont.addEventListener('mousedown', handleMapHoldStart, true);
+            cont.addEventListener('touchstart', handleMapHoldStart, { capture: true, passive: false });
+            cont.addEventListener('mousemove', handleMapHoldMove, true);
+            cont.addEventListener('touchmove', handleMapHoldMove, { capture: true, passive: false });
+            cont.addEventListener('mouseup', cancelMapHold, true);
+            cont.addEventListener('mouseleave', cancelMapHold, true);
+            cont.addEventListener('touchend', cancelMapHold, true);
+            cont.addEventListener('touchcancel', cancelMapHold, true);
         }
 
         let ignoreNextMapClickTimeout = 0;
@@ -3650,11 +3658,17 @@
             document.getElementById('btn-follow-contour').style.display = 'none';
             map.getContainer().style.cursor = '';
             map.off('click', onMapClickForBreak);
-            map.off('mousedown', handleMapHoldStart);
-            map.off('touchstart', handleMapHoldStart);
-            map.off('mousemove', handleMapHoldMove);
-            map.off('touchmove', handleMapHoldMove);
-            map.off('mouseup mouseleave touchend touchcancel', cancelMapHold);
+            
+            const cont = map.getContainer();
+            cont.removeEventListener('mousedown', handleMapHoldStart, true);
+            cont.removeEventListener('touchstart', handleMapHoldStart, true);
+            cont.removeEventListener('mousemove', handleMapHoldMove, true);
+            cont.removeEventListener('touchmove', handleMapHoldMove, true);
+            cont.removeEventListener('mouseup', cancelMapHold, true);
+            cont.removeEventListener('mouseleave', cancelMapHold, true);
+            cont.removeEventListener('touchend', cancelMapHold, true);
+            cont.removeEventListener('touchcancel', cancelMapHold, true);
+
             cancelMapHold();
             setBreakFullscreen(false);
         }
