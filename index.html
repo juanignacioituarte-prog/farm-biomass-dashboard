@@ -156,6 +156,9 @@
         path.leaflet-interactive {
             -webkit-tap-highlight-color: transparent;
             outline: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            user-select: none;
         }
 
         .val {
@@ -2886,17 +2889,29 @@
 
         function handleMapHoldStart(e) {
             if (!isDrawingBreak || currentDrawingMode !== 'polygon') return;
-            mapHoldStartPos = e.containerPoint;
             
-            const pName = getPaddockFromPoint(e.latlng);
+            // Robust event support (Leaflet e vs raw DOM ev)
+            const ev = e.originalEvent || e;
+            const containerPoint = e.containerPoint || map.mouseEventToContainerPoint(ev);
+            const latlng = e.latlng || map.mouseEventToLatLng(ev);
+            
+            mapHoldStartPos = containerPoint;
+            
+            const pName = getPaddockFromPoint(latlng);
             if (pName && paddockMap[pName]) {
                 mapHoldPaddock = pName;
-                // Visual feedback: white highlight
-                paddockMap[pName].setStyle({ fillColor: 'white', fillOpacity: 0.4, weight: 3 });
+                
+                // VIBRATE to confirm "Hold Started"
+                if (navigator.vibrate) navigator.vibrate(50);
+                
+                // Visual feedback: white high-opacity highlight
+                paddockMap[pName].setStyle({ fillColor: 'white', fillOpacity: 0.6, weight: 4 });
                 
                 mapHoldTimer = setTimeout(() => {
                     selectWholePaddockForBreak(pName);
                     if (paddockMap[pName]) paddockMap[pName].setStyle({ fillColor: 'white', fillOpacity: 0.1, weight: 1.5 });
+                    // SUCCESS haptic feedback
+                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
                     mapHoldTimer = null;
                     mapHoldPaddock = null;
                 }, 3000);
@@ -2905,7 +2920,10 @@
 
         function handleMapHoldMove(e) {
             if (!mapHoldTimer || !mapHoldStartPos) return;
-            if (mapHoldStartPos.distanceTo(e.containerPoint) > 15) {
+            const ev = e.originalEvent || e;
+            const pos = e.containerPoint || map.mouseEventToContainerPoint(ev);
+            // Increase slop to 40px for natural wobble
+            if (mapHoldStartPos.distanceTo(pos) > 40) {
                 cancelMapHold();
             }
         }
