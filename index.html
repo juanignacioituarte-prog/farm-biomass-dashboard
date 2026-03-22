@@ -1476,16 +1476,6 @@
                             <small>kg/day</small>
                         </div>
                     </div>
-                    <div class="avg-row" id="secondary-avg-row" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
-                        <div class="avg-item"><small>FARM AREA</small>
-                            <div id="total-farm-area" style="font-size: 16px; font-weight: bold;">0</div>
-                            <small>ha</small>
-                        </div>
-                        <div class="avg-item"><small>OUT ROTATION</small>
-                            <div id="total-out-rotation" style="font-size: 16px; font-weight: bold;">0</div>
-                            <small>ha</small>
-                        </div>
-                    </div>
                 </div>
                 <div class="sync-note">Synchronized on <span id="sync-time">...</span></div>
             </div>
@@ -1546,6 +1536,19 @@
                 <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">Done</button>
             </div>
             
+            <div class="avg-box" style="margin-bottom:15px;">
+                <div class="avg-row">
+                    <div class="avg-item"><small>FARM AREA</small>
+                        <div id="report-farm-area" style="font-size: 20px; font-weight: bold;">0</div>
+                        <small>ha</small>
+                    </div>
+                    <div class="avg-item"><small>OUT ROTATION</small>
+                        <div id="report-out-rotation" style="font-size: 20px; font-weight: bold;">0</div>
+                        <small>ha</small>
+                    </div>
+                </div>
+            </div>
+
             <div style="background:#fff; border-radius:8px; padding:12px; margin-bottom:15px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                 <div style="font-size:12px; font-weight:bold; color:#2c3e50; margin-bottom:8px;">Custom Date Range Focus</div>
                 <div style="display:flex; gap:8px; margin-bottom:8px;">
@@ -2278,7 +2281,6 @@
                 if (avgUnit) avgUnit.textContent = 'kgDM/ha';
                 if (growthLabel) growthLabel.textContent = 'GROWTH';
                 if (growthUnit) growthUnit.textContent = 'kg/day';
-                if (document.getElementById('secondary-avg-row')) document.getElementById('secondary-avg-row').style.display = 'flex';
             }
 
             // UI Toggles
@@ -2633,13 +2635,9 @@
             });
 
             let tWCover = 0, tAreaC = 0, tWGrowth = 0, tAreaG = 0;
-            let totalFarmArea = 0, totalOutArea = 0;
             sorted.forEach(p => {
                 const areaNum = p.area || 0;
-                totalFarmArea += areaNum;
-                if (p.isOut) {
-                    totalOutArea += areaNum;
-                } else if (areaNum > 0) {
+                if (areaNum > 0 && !p.isOut) {
                     tWCover += (p.latest.cover * areaNum); tAreaC += areaNum;
                     if (p.growthRate && p.growthRate > 0) { tWGrowth += (p.growthRate * areaNum); tAreaG += areaNum; }
                 }
@@ -2650,10 +2648,6 @@
             const avgGrowthVal = tAreaG > 0 ? Math.round(tWGrowth / tAreaG) : 0;
 
             document.getElementById('total-avg').innerText = avgCoverVal.toLocaleString();
-            
-            // Populate new metrics
-            if (document.getElementById('total-farm-area')) document.getElementById('total-farm-area').innerText = totalFarmArea.toFixed(1);
-            if (document.getElementById('total-out-rotation')) document.getElementById('total-out-rotation').innerText = totalOutArea.toFixed(1);
             document.getElementById('avg-growth').innerText = "+" + avgGrowthVal;
             document.getElementById('sync-time').innerText = new Date().toLocaleTimeString();
 
@@ -4155,9 +4149,6 @@
             if (growthLabel) growthLabel.textContent = 'EST. ROUND';
             if (growthUnit) growthUnit.textContent = 'days';
             document.getElementById('avg-growth').innerText = estRound;
-            
-            // Hide secondary row in breaks mode to save vertical space
-            if (document.getElementById('secondary-avg-row')) document.getElementById('secondary-avg-row').style.display = 'none';
 
             let html = '';
 
@@ -4222,6 +4213,20 @@
         function renderWeeklyReport() {
             const container = document.getElementById('weekly-report-content');
             if (!container) return;
+            
+            // Update Farm Stats at top of report
+            let totalFarmArea = 0;
+            let totalOutArea = 0;
+            const mData = getCurrentModeData();
+            mData.forEach(p => {
+                const a = p.area || 0;
+                totalFarmArea += a;
+                if (p.isOut) totalOutArea += a;
+            });
+            const rfa = document.getElementById('report-farm-area');
+            if (rfa) rfa.innerText = totalFarmArea.toFixed(1);
+            const ror = document.getElementById('report-out-rotation');
+            if (ror) ror.innerText = totalOutArea.toFixed(1);
             
             const startDaySelector = document.getElementById('report-start-day');
             const targetDay = startDaySelector ? parseInt(startDaySelector.value) : 2; // Default Tuesday (2)
