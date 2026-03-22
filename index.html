@@ -2998,13 +2998,15 @@
         let autoSaveTimeout = null;
         let weeklyFilterRange = null;
 
-        function clearWeeklyFilter() {
+        function clearWeeklyFilter(skipFit) {
             weeklyFilterRange = null;
             if (currentDashboardMode === 'breaks') renderBreaksDashboard();
             if (currentDashboardMode === 'weekly_report') renderWeeklyReport();
             
             renderBreaksOnMap();
             
+            if (skipFit) return;
+
             setTimeout(() => {
                 let validBounds = null;
                 breakLayers.forEach(l => {
@@ -3537,7 +3539,7 @@
         }
 
         function startDrawingBreak(mode) {
-            clearWeeklyFilter();
+            clearWeeklyFilter(true);
             if (isDrawingBreak) return;
             isDrawingBreak = true;
             currentDrawingMode = mode || 'polygon';
