@@ -153,6 +153,11 @@
             background: #f0f7ff;
         }
 
+        path.leaflet-interactive {
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+        }
+
         .val {
             font-size: 17px;
             font-weight: bold;
@@ -2241,8 +2246,27 @@
                         layer.bindTooltip("", { permanent: true, direction: 'center', className: 'paddock-label' });
                         layer.on('mouseover', function () { if (isDrawingBreak) return; const tip = layer.getTooltip(); if (tip && tip.getElement()) tip.getElement().classList.add('show-label'); });
                         layer.on('mouseout', function () { if (isDrawingBreak) return; const tip = layer.getTooltip(); if (tip && tip.getElement()) tip.getElement().classList.remove('show-label'); });
+                        
+                        let holdTimer = null;
+                        const startHold = (e) => {
+                            if (!isDrawingBreak || currentDrawingMode !== 'polygon') return;
+                            holdTimer = setTimeout(() => {
+                                selectWholePaddockForBreak(pName);
+                            }, 3000);
+                        };
+                        const cancelHold = () => {
+                            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+                        };
+
+                        layer.on('mousedown', startHold);
+                        layer.on('touchstart', startHold, {passive: true});
+                        layer.on('mouseup', cancelHold);
+                        layer.on('mouseleave', cancelHold);
+                        layer.on('touchend', cancelHold);
+                        layer.on('touchcancel', cancelHold);
+
                         layer.on('click', (e) => {
-                            if (isDrawingBreak) return;
+                            if (isDrawingBreak) return; // bubble up for drawing
                             L.DomEvent.stopPropagation(e);
                             const p = getCurrentModeData().find(d => d.name === pName);
                             const isOut = p ? p.isOut : true;
@@ -2872,6 +2896,59 @@
             document.querySelectorAll('.card').forEach(c => c.style.display = c.querySelector('b').innerText.toLowerCase().includes(q) ? 'block' : 'none');
         };
 
+        function selectWholePaddockForBreak(pName) {
+            const layer = paddockMap[pName];
+            if (!layer || !layer.feature) return;
+            
+            let rings = [];
+            const geom = layer.feature.geometry;
+            if (geom.type === 'Polygon') {
+                rings = geom.coordinates[0];
+            } else if (geom.type === 'MultiPolygon') {
+                rings = geom.coordinates[0][0]; // naive assumption taking the first polygon's outer ring
+            }
+            if (!rings || rings.length === 0) return;
+            
+            // Block the map.click event from firing right after lifting finger
+            ignoreNextMapClickTimeout = Date.now() + 500;
+            
+            drawingVertices = rings.map(c => ({ lat: c[1], lng: c[0] }));
+            
+            // Remove the last vertex if it's identical to the first (GeoJSON closure ring)
+            if (drawingVertices.length > 2) {
+                const first = drawingVertices[0];
+                const last = drawingVertices[drawingVertices.length - 1];
+                if (first.lat === last.lat && first.lng === last.lng) {
+                    drawingVertices.pop();
+                }
+            }
+            
+            drawingMarkers.forEach(m => map.removeLayer(m));
+            const gColor = getGroupColor(activeBreakGroup);
+            drawingMarkers = drawingVertices.map((v, idx) => {
+                const marker = L.marker([v.lat, v.lng], {
+                    draggable: true,
+                    icon: L.divIcon({
+                        className: 'break-vertex-icon',
+                        html: `<div style="background:${gColor}; width:10px; height:10px; border-radius:50%; border:2px solid white; box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>`,
+                        iconSize: [14, 14], iconAnchor: [7, 7]
+                    })
+                }).addTo(map);
+                
+                marker.on('drag', (e) => {
+                    const newPos = e.target.getLatLng();
+                    drawingVertices[idx] = { lat: newPos.lat, lng: newPos.lng };
+                    redrawDrawingLayers();
+                    updateVertexCount();
+                });
+                return marker;
+            });
+            
+            redrawDrawingLayers();
+            updateVertexCount();
+            if (navigator.vibrate) navigator.vibrate(200);
+        }
+
         /* FEED CALCULATOR LOGIC */
         let autoSaveTimeout = null;
         let weeklyFilterRange = null;
@@ -3431,8 +3508,10 @@
             map.on('click', onMapClickForBreak);
         }
 
+        let ignoreNextMapClickTimeout = 0;
         function onMapClickForBreak(e) {
             if (!isDrawingBreak) return;
+            if (Date.now() < ignoreNextMapClickTimeout) return;
             const latLng = e.latlng;
             drawingVertices.push({ lat: latLng.lat, lng: latLng.lng });
             rebuildDrawingMarkers();
@@ -4001,8 +4080,8 @@
                 });
                 
                 renderLayer.on('click', function(e) {
+                    if (breakSelectMode || isDrawingBreak) return; // Don't interrupt drawing or selecting, let the event naturally bubble up or ignore it 
                     L.DomEvent.stopPropagation(e);
-                    if (breakSelectMode || isDrawingBreak) return; // Don't interrupt drawing or selecting
                     scrollToBreakCard(brk.id);
                 });
 
