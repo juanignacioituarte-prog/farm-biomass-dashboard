@@ -3162,10 +3162,32 @@
 
             // Save to cloud in background - Simple POST (avoid preflight)
             if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.length > 5) {
+                // Compress payload before sending to avoid Google Sheets 50k char limit
+                const compressedBreaks = savedBreaks.map(b => {
+                    const cb = {
+                        id: b.id,
+                        name: b.name,
+                        paddock: b.paddock,
+                        vertices: b.vertices ? b.vertices.map(v => ({ lat: Number(v.lat.toFixed(6)), lng: Number(v.lng.toFixed(6)) })) : [],
+                        areaSqm: Math.round(b.areaSqm || 0),
+                        areaHa: Number((b.areaHa || 0).toFixed(3)),
+                        distanceMeters: Math.round(b.distanceMeters || 0),
+                        cropWidthMeters: Number((b.cropWidthMeters || 0).toFixed(2)),
+                        cropMode: b.cropMode,
+                        createdAt: b.createdAt,
+                        createdBy: b.createdBy,
+                        group: b.group
+                    };
+                    if (b.comment) cb.comment = b.comment;
+                    if (b.lastEditedBy) cb.lastEditedBy = b.lastEditedBy;
+                    if (b.lastEditedAt) cb.lastEditedAt = b.lastEditedAt;
+                    return cb;
+                });
+
                 console.log("Saving breaks to cloud...");
                 fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ type: 'breaks', breaks: savedBreaks })
+                    body: JSON.stringify({ type: 'breaks', breaks: compressedBreaks })
                 })
                 .then(res => console.log("Cloud save res:", res.status))
                 .catch(e => { console.log('Cloud breaks save failed', e); });
