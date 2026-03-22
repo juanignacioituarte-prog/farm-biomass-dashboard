@@ -2248,22 +2248,51 @@
                         layer.on('mouseout', function () { if (isDrawingBreak) return; const tip = layer.getTooltip(); if (tip && tip.getElement()) tip.getElement().classList.remove('show-label'); });
                         
                         let holdTimer = null;
+                        let holdStartPos = null;
+                        
                         const startHold = (e) => {
                             if (!isDrawingBreak || currentDrawingMode !== 'polygon') return;
+                            
+                            // Capture starting position to check for movement slop
+                            holdStartPos = e.containerPoint || (e.originalEvent && e.originalEvent.touches ? L.point(e.originalEvent.touches[0].clientX, e.originalEvent.touches[0].clientY) : null);
+                            
+                            // Visual feedback: highlight paddock being held
+                            layer.setStyle({ fillColor: 'white', fillOpacity: 0.4, weight: 3 });
+                            
                             holdTimer = setTimeout(() => {
                                 selectWholePaddockForBreak(pName);
+                                layer.setStyle({ fillColor: 'white', fillOpacity: 0.1, weight: 1.5 }); // Reset after success
+                                holdTimer = null;
                             }, 3000);
                         };
+                        
                         const cancelHold = () => {
-                            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+                            if (holdTimer) { 
+                                clearTimeout(holdTimer); 
+                                holdTimer = null; 
+                                // Reset visual style if cancelled
+                                layer.setStyle({ fillColor: 'white', fillOpacity: 0.1, weight: 1.5 });
+                            }
+                        };
+                        
+                        const checkMove = (e) => {
+                            if (!holdTimer || !holdStartPos) return;
+                            const pos = e.containerPoint || (e.originalEvent && e.originalEvent.touches ? L.point(e.originalEvent.touches[0].clientX, e.originalEvent.touches[0].clientY) : null);
+                            // If finger moves more than 15 pixels, cancel the hold (panning map)
+                            if (pos && holdStartPos.distanceTo(pos) > 15) {
+                                cancelHold();
+                            }
                         };
 
                         layer.on('mousedown', startHold);
-                        layer.on('touchstart', startHold, {passive: true});
-                        layer.on('mouseup', cancelHold);
-                        layer.on('mouseleave', cancelHold);
-                        layer.on('touchend', cancelHold);
-                        layer.on('touchcancel', cancelHold);
+                        layer.on('touchstart', startHold);
+                        layer.on('mousemove', checkMove);
+                        layer.on('touchmove', checkMove);
+                        layer.on('mouseup mouseleave touchend touchcancel', cancelHold);
+                        
+                        layer.on('contextmenu', (e) => {
+                            if (isDrawingBreak) L.DomEvent.preventDefault(e);
+                        });
 
                         layer.on('click', (e) => {
                             if (isDrawingBreak) return; // bubble up for drawing
