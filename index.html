@@ -3464,10 +3464,25 @@
                 try { oscillator.stop(); } catch(e){}
                 oscillator = null;
             }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
             renderBreaksDashboard();
         }
 
         let lastBeepRate = 0;
+        let currentAudioFreq = 440;
+        let lastVoiceTime = 0;
+
+        function speakVoice(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.rate = 1.2;
+                window.speechSynthesis.speak(msg);
+            }
+        }
+        
         function updateAudioAid(latlng) {
             if (!activeSoundBreakId || !latlng) return;
             const brk = savedBreaks.find(b => String(b.id) === activeSoundBreakId);
@@ -3478,7 +3493,9 @@
                 return; 
             }
 
-            const distance = getMinDistanceToFence(latlng, brk);
+            const result = getMinDistanceToFence(latlng, brk);
+            const distance = result.distance;
+            const side = result.side;
             const acc = (currentGPSPos && currentGPSPos.accuracy) ? currentGPSPos.accuracy : 0;
             
             if (debugOverlay) {
@@ -3498,14 +3515,30 @@
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 if (oscillator) { stopOsc(); }
                 lastBeepRate = 0;
+                lastVoiceTime = 0;
             } else if (distance <= continuousDist) {
                 // Continuous tone
                 if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
                 playTone(440, 1.0); // A4 continuous
                 if (navigator.vibrate) navigator.vibrate(200);
                 lastBeepRate = -1; // special state for continuous
+                
+                const now = Date.now();
+                if (now - lastVoiceTime > 6000) {
+                    speakVoice("On line");
+                    lastVoiceTime = now;
+                }
             } else {
                 if (oscillator && lastBeepRate === -1) { stopOsc(); }
+                
+                currentAudioFreq = side === 'left' ? 349.23 : (side === 'right' ? 523.25 : 440);
+                
+                const now = Date.now();
+                if (now - lastVoiceTime > 6000) {
+                    if (side === 'left') speakVoice("Steer right");
+                    else if (side === 'right') speakVoice("Steer left");
+                    lastVoiceTime = now;
+                }
                 
                 // Beeping (frequency increases as distance decreases: 0.5Hz to 10Hz)
                 // Linear scale starting from threshold down to continuousDist
@@ -3516,13 +3549,13 @@
                 // Only change interval if rate change is significant (> 10%)
                 if (Math.abs(beepRate - lastBeepRate) > (lastBeepRate * 0.1) || lastBeepRate <= 0) {
                     if (beepInterval) clearInterval(beepInterval);
-                    console.log(`AudioAid: setting beepRate=${beepRate.toFixed(2)}Hz`);
+                    console.log(`AudioAid: setting beepRate=${beepRate.toFixed(2)}Hz side=${side}`);
                     
-                    playBeep(440, 0.1); 
+                    playBeep(currentAudioFreq, 0.1); 
                     if (navigator.vibrate) try { navigator.vibrate(50); } catch(e){}
                     
                     beepInterval = setInterval(() => {
-                        playBeep(440, 0.1);
+                        playBeep(currentAudioFreq, 0.1);
                         if (navigator.vibrate) try { navigator.vibrate(50); } catch(e){}
                     }, 1000 / beepRate);
                     lastBeepRate = beepRate;
@@ -3595,12 +3628,18 @@
                         
                         const seq1 = off1.geometry.coordinates.map(c => ({lat: c[1], lng: c[0]}));
                         const seq2 = off2.geometry.coordinates.map(c => ({lat: c[1], lng: c[0]}));
-                        return [seq1, seq2];
+                        
+                        const resultSegments = [];
+                        for(let i=0; i<seq1.length-1; i++) resultSegments.push([seq1[i], seq1[i+1]]);
+                        for(let i=0; i<seq2.length-1; i++) resultSegments.push([seq2[i], seq2[i+1]]);
+                        return resultSegments;
                     } catch(e) {
                         console.error("AudioAid offset failed:", e);
                     }
                 }
-                return [brk.vertices];
+                const resultSegments = [];
+                for(let i=0; i<brk.vertices.length-1; i++) resultSegments.push([brk.vertices[i], brk.vertices[i+1]]);
+                return resultSegments;
             }
             if (!brk.vertices || brk.vertices.length < 3) return [];
 
@@ -3671,15 +3710,31 @@
 
         function getMinDistanceToFence(latlng, brk) {
             const segments = getFenceSegments(brk);
-            if (segments.length === 0) return 999;
+            if (segments.length === 0) return { distance: 999, side: 'center' };
             const pt = turf.point([latlng.lng, latlng.lat]);
             let minD = 999;
+            let closestSeg = null;
             segments.forEach(seg => {
                 const line = turf.lineString(seg.map(v => [v.lng, v.lat]));
                 const d = turf.pointToLineDistance(pt, line, { units: 'meters' });
-                if (d < minD) minD = d;
+                if (d < minD) {
+                    minD = d;
+                    closestSeg = seg;
+                }
             });
-            return minD;
+            
+            let side = 'center';
+            if (closestSeg) {
+                const A = closestSeg[0];
+                const B = closestSeg[1];
+                const C = latlng;
+                const cross = (B.lng - A.lng) * (C.lat - A.lat) - (B.lat - A.lat) * (C.lng - A.lng);
+                
+                // If cross > 0, C is left of AB. If C is left, user needs to steer right to hit line.
+                if (cross > 0.000001) side = 'left';
+                else if (cross < -0.000001) side = 'right';
+            }
+            return { distance: minD, side: side };
         }
 
         function promptDeleteBreak(breakId, event) {
