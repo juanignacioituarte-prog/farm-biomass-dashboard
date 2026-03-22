@@ -1532,10 +1532,37 @@
 
         <div id="weekly-report-view" style="display:none; padding:15px; flex-grow:1; background:#f9f9f9; overflow-y:auto;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h3 style="margin-top:0; margin-bottom:0;">Weekly Pasture Area</h3>
+                <h3 style="margin-top:0; margin-bottom:0;">Pasture Reports</h3>
                 <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">Done</button>
             </div>
-            <p style="font-size:12px; color:#666; margin-bottom:15px;">Calculated from Tuesday to Monday using saved breaks (excluding crops).</p>
+            
+            <div style="background:#fff; border-radius:8px; padding:12px; margin-bottom:15px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                <div style="font-size:12px; font-weight:bold; color:#2c3e50; margin-bottom:8px;">Custom Date Range Focus</div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <input type="date" id="report-start-date" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:12px; box-sizing:border-box;">
+                    </div>
+                    <div style="line-height:28px; color:#95a5a6; font-size:12px;">to</div>
+                    <div style="flex:1;">
+                        <input type="date" id="report-end-date" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:12px; box-sizing:border-box;">
+                    </div>
+                </div>
+                <button onclick="generateCustomReport()" style="width:100%; background:#3498db; color:#fff; border:none; padding:8px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">VIEW DATE RANGE</button>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="font-size:14px; font-weight:bold; color:#2c3e50;">Weekly Reports</div>
+                <select id="report-start-day" onchange="renderWeeklyReport()" style="font-size:11px; padding:4px; border:1px solid #ddd; border-radius:4px;">
+                    <option value="0">Sun - Sat</option>
+                    <option value="1">Mon - Sun</option>
+                    <option value="2" selected>Tue - Mon</option>
+                    <option value="3">Wed - Tue</option>
+                    <option value="4">Thu - Wed</option>
+                    <option value="5">Fri - Thu</option>
+                    <option value="6">Sat - Fri</option>
+                </select>
+            </div>
+            <p style="font-size:10px; color:#95a5a6; margin-top:0; margin-bottom:10px;">Tap any week to isolate its breaks on the map.</p>
             <div id="weekly-report-content"></div>
         </div>
     </div>
@@ -2814,6 +2841,48 @@
 
         /* FEED CALCULATOR LOGIC */
         let autoSaveTimeout = null;
+        let weeklyFilterRange = null;
+
+        function clearWeeklyFilter() {
+            weeklyFilterRange = null;
+            renderBreaksDashboard();
+            renderBreaksOnMap();
+        }
+
+        function viewWeeklyReportBreaks(startTs, endTs) {
+            weeklyFilterRange = { start: startTs, end: endTs };
+            if (document.getElementById('weekly-report-view')) document.getElementById('weekly-report-view').style.display = 'none';
+            switchDashboardMode('breaks');
+            
+            setTimeout(() => {
+                let validBounds = null;
+                breakLayers.forEach(l => {
+                    if (l) {
+                        try {
+                            const bnd = l.getBounds();
+                            if (validBounds) {
+                                validBounds.extend(bnd);
+                            } else {
+                                validBounds = bnd;
+                            }
+                        } catch (e) {}
+                    }
+                });
+                if (validBounds && validBounds.isValid()) {
+                    map.fitBounds(validBounds, { padding: [40, 40] });
+                }
+            }, 300);
+        }
+
+        function generateCustomReport() {
+            const startStr = document.getElementById('report-start-date').value;
+            const endStr = document.getElementById('report-end-date').value;
+            if (!startStr || !endStr) return alert("Please select both start and end dates.");
+            const startTs = new Date(startStr + "T00:00:00").getTime();
+            const endTs = new Date(endStr + "T00:00:00").getTime() + 86400000;
+            if (endTs <= startTs) return alert("End date must be on or after start date.");
+            viewWeeklyReportBreaks(startTs, endTs);
+        }
         function triggerAutoSave() {
             if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
             autoSaveTimeout = setTimeout(() => {
@@ -3300,6 +3369,7 @@
         }
 
         function startDrawingBreak(mode) {
+            clearWeeklyFilter();
             if (isDrawingBreak) return;
             isDrawingBreak = true;
             currentDrawingMode = mode || 'polygon';
@@ -3831,6 +3901,15 @@
                     breakLayers.push(null);
                     return;
                 }
+                if (weeklyFilterRange) {
+                    if (!brk.createdAt) { breakLayers.push(null); return; }
+                    const ts = new Date(brk.createdAt).getTime();
+                    if (ts < weeklyFilterRange.start || ts >= weeklyFilterRange.end) {
+                        breakLayers.push(null); 
+                        return; 
+                    }
+                }
+                
                 const coords = brk.vertices.map(v => [v.lat, v.lng]);
                 const gColor = getGroupColor(brk.group);
                 const isCrop = brk.group === 'crops';
@@ -3987,7 +4066,18 @@
             // Ensure newest is at the top before rendering
             savedBreaks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-            const groupBreaks = activeBreakGroup === 'all' ? savedBreaks : savedBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
+            savedBreaks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            let groupBreaks = activeBreakGroup === 'all' ? savedBreaks : savedBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
+            
+            if (weeklyFilterRange) {
+                groupBreaks = groupBreaks.filter(b => {
+                    if (!b.createdAt) return false;
+                    const ts = new Date(b.createdAt).getTime();
+                    return ts >= weeklyFilterRange.start && ts < weeklyFilterRange.end;
+                });
+            }
+
             const count = groupBreaks.length;
 
             // Calculate avg area/day globally (excluding crops)
@@ -4026,7 +4116,19 @@
                     ${g.name}<br><span style="font-size:8px; opacity:0.8;">(${gCount})</span>
                 </button>`;
             });
-            html += '</div>';
+            html += `</div>`;
+
+            if (weeklyFilterRange) {
+                const s = new Date(weeklyFilterRange.start).toLocaleDateString('en-NZ', { month:'short', day:'numeric' });
+                const e = new Date(weeklyFilterRange.end - 86400000).toLocaleDateString('en-NZ', { month:'short', day:'numeric' });
+                html += `<div style="background:#fff3e0; border:1px solid #ffb74d; padding:8px 12px; margin-bottom:12px; border-radius:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="line-height:1.3;">
+                        <strong style="color:#e67e22;">Historical View</strong><br>
+                        ${s} to ${e}
+                    </div>
+                    <button onclick="clearWeeklyFilter()" style="background:#e67e22; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer; box-shadow: 0 2px 4px rgba(230,126,34,0.3);">CLEAR</button>
+                </div>`;
+            }
 
             // Action buttons row
             html += `<div style="display:flex; gap:8px; margin-bottom:10px;">`;
@@ -4065,6 +4167,9 @@
             const container = document.getElementById('weekly-report-content');
             if (!container) return;
             
+            const startDaySelector = document.getElementById('report-start-day');
+            const targetDay = startDaySelector ? parseInt(startDaySelector.value) : 2; // Default Tuesday (2)
+            
             const weeks = {};
             
             savedBreaks.forEach(b => {
@@ -4072,20 +4177,20 @@
                 
                 const d = new Date(b.createdAt);
                 
-                // Find most recent Tuesday
+                // Find most recent target day
                 const day = d.getDay(); // 0-6 (Sun-Sat)
-                const diff = (day >= 2 ? day - 2 : day + 5);
-                const tues = new Date(d);
-                tues.setDate(d.getDate() - diff);
-                tues.setHours(0,0,0,0);
+                const diff = (day >= targetDay ? day - targetDay : day + 7 - targetDay);
+                const weekStart = new Date(d);
+                weekStart.setDate(d.getDate() - diff);
+                weekStart.setHours(0,0,0,0);
                 
-                const key = tues.getTime();
+                const key = weekStart.getTime();
                 if (!weeks[key]) {
-                    const mon = new Date(tues);
-                    mon.setDate(tues.getDate() + 6);
+                    const weekEnd = new Date(weekStart);
+                    weekEnd.setDate(weekStart.getDate() + 7);
                     weeks[key] = {
-                        start: tues,
-                        end: mon,
+                        start: weekStart,
+                        end: weekEnd,
                         totalArea: 0,
                         breakCount: 0
                     };
@@ -4103,15 +4208,16 @@
                 sortedKeys.forEach(k => {
                     const w = weeks[k];
                     const p1 = w.start.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' });
-                    const p2 = w.end.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric', year: 'numeric' });
+                    const p2 = new Date(w.end.getTime() - 86400000).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric', year: 'numeric' });
                     
-                    html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 15px; border-bottom:1px solid #f0f0f0;">
+                    html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 15px; border-bottom:1px solid #f0f0f0; cursor:pointer;" onclick="viewWeeklyReportBreaks(${w.start.getTime()}, ${w.end.getTime()})">
                         <div>
                             <div style="font-weight:bold; color:#2c3e50; font-size:14px;">${p1} - ${p2}</div>
                             <div style="font-size:11px; color:#95a5a6; margin-top:3px;">${w.breakCount} break${w.breakCount!==1?'s':''}</div>
                         </div>
                         <div style="text-align:right;">
                             <div style="font-weight:bold; color:var(--accent); font-size:18px;">${w.totalArea.toFixed(2)} <span style="font-size:11px; font-weight:normal; color:#7f8c8d;">ha</span></div>
+                            <div style="font-size:10px; color:#3498db; margin-top:2px;">Tap to view map ➔</div>
                         </div>
                     </div>`;
                 });
