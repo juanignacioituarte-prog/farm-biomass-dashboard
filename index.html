@@ -1435,6 +1435,7 @@
                 <div id="settings-menu" class="dropdown-menu">
                     <div class="dropdown-item" id="menu-item-admin" style="display:none;" onclick="switchDashboardMode('admin'); toggleSettingsMenu();">Invite Users</div>
                     <div class="dropdown-item" onclick="switchDashboardMode('audio_settings'); toggleSettingsMenu();">Audio & Map Settings</div>
+                    <div class="dropdown-item" onclick="switchDashboardMode('weekly_report'); toggleSettingsMenu();">Weekly Area Report</div>
                     <div class="dropdown-item" onclick="location.reload()">Refresh App</div>
                 </div>
                 <div class="mode-toggle-container" style="flex:1; margin-bottom:0;">
@@ -1527,6 +1528,15 @@
             </div>
             
             <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:6px; font-weight:bold; cursor:pointer; width:100%;">Done</button>
+        </div>
+
+        <div id="weekly-report-view" style="display:none; padding:15px; flex-grow:1; background:#f9f9f9; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin-top:0; margin-bottom:0;">Weekly Pasture Area</h3>
+                <button onclick="switchDashboardMode('breaks')" style="background:#2ecc71; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">Done</button>
+            </div>
+            <p style="font-size:12px; color:#666; margin-bottom:15px;">Calculated from Tuesday to Monday using saved breaks (excluding crops).</p>
+            <div id="weekly-report-content"></div>
         </div>
     </div>
 </div>
@@ -2283,6 +2293,7 @@
                 document.getElementById('list').style.display = 'block';
                 document.getElementById('admin-view').style.display = 'none';
                 if (document.getElementById('audio-settings-view')) document.getElementById('audio-settings-view').style.display = 'none';
+                if (document.getElementById('weekly-report-view')) document.getElementById('weekly-report-view').style.display = 'none';
                 
                 const sidebar = document.getElementById('sidebar');
                 const isMinimized = sidebar.classList.contains('minimized');
@@ -2339,6 +2350,16 @@
                     
                     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
                     return;
+                } else if (mode === 'weekly_report') {
+                    document.getElementById('map').style.display = 'none';
+                    document.getElementById('list').style.display = 'none';
+                    document.getElementById('admin-view').style.display = 'none';
+                    if (document.getElementById('audio-settings-view')) document.getElementById('audio-settings-view').style.display = 'none';
+                    document.getElementById('weekly-report-view').style.display = 'block';
+                    
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    renderWeeklyReport();
+                    return;
                 } else {
                     setLayerMode(currentViewMode);
                 }
@@ -2346,6 +2367,7 @@
 
             document.getElementById('admin-view').style.display = 'none';
             if (document.getElementById('audio-settings-view')) document.getElementById('audio-settings-view').style.display = 'none';
+            if (document.getElementById('weekly-report-view')) document.getElementById('weekly-report-view').style.display = 'none';
             renderDashboard();
             updateGeoStyles();
         }
@@ -4037,6 +4059,65 @@
                 });
             }
             list.innerHTML = html;
+        }
+
+        function renderWeeklyReport() {
+            const container = document.getElementById('weekly-report-content');
+            if (!container) return;
+            
+            const weeks = {};
+            
+            savedBreaks.forEach(b => {
+                if (b.group === 'crops' || !b.createdAt) return;
+                
+                const d = new Date(b.createdAt);
+                
+                // Find most recent Tuesday
+                const day = d.getDay(); // 0-6 (Sun-Sat)
+                const diff = (day >= 2 ? day - 2 : day + 5);
+                const tues = new Date(d);
+                tues.setDate(d.getDate() - diff);
+                tues.setHours(0,0,0,0);
+                
+                const key = tues.getTime();
+                if (!weeks[key]) {
+                    const mon = new Date(tues);
+                    mon.setDate(tues.getDate() + 6);
+                    weeks[key] = {
+                        start: tues,
+                        end: mon,
+                        totalArea: 0,
+                        breakCount: 0
+                    };
+                }
+                weeks[key].totalArea += b.areaHa;
+                weeks[key].breakCount++;
+            });
+            
+            const sortedKeys = Object.keys(weeks).map(Number).sort((a,b) => b - a);
+            
+            if (sortedKeys.length === 0) {
+                container.innerHTML = '<p style="font-size:12px; color:#95a5a6;">No break data available yet.</p>';
+            } else {
+                let html = '<div style="background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); overflow:hidden;">';
+                sortedKeys.forEach(k => {
+                    const w = weeks[k];
+                    const p1 = w.start.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' });
+                    const p2 = w.end.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric', year: 'numeric' });
+                    
+                    html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 15px; border-bottom:1px solid #f0f0f0;">
+                        <div>
+                            <div style="font-weight:bold; color:#2c3e50; font-size:14px;">${p1} - ${p2}</div>
+                            <div style="font-size:11px; color:#95a5a6; margin-top:3px;">${w.breakCount} break${w.breakCount!==1?'s':''}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:bold; color:var(--accent); font-size:18px;">${w.totalArea.toFixed(2)} <span style="font-size:11px; font-weight:normal; color:#7f8c8d;">ha</span></div>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            }
         }
 
         function renderBreakCardHtml(brk) {
