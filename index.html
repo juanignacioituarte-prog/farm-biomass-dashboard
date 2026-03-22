@@ -1476,6 +1476,16 @@
                             <small>kg/day</small>
                         </div>
                     </div>
+                    <div class="avg-row" id="secondary-avg-row" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
+                        <div class="avg-item"><small>FARM AREA</small>
+                            <div id="total-farm-area" style="font-size: 16px; font-weight: bold;">0</div>
+                            <small>ha</small>
+                        </div>
+                        <div class="avg-item"><small>OUT ROTATION</small>
+                            <div id="total-out-rotation" style="font-size: 16px; font-weight: bold;">0</div>
+                            <small>ha</small>
+                        </div>
+                    </div>
                 </div>
                 <div class="sync-note">Synchronized on <span id="sync-time">...</span></div>
             </div>
@@ -2259,7 +2269,6 @@
             document.getElementById('btn-mode-feed').classList.toggle('active', mode === 'feed');
             document.getElementById('btn-mode-breaks').classList.toggle('active', mode === 'breaks');
 
-            // Reset header labels when leaving breaks mode
             if (mode !== 'breaks') {
                 const avgLabel = document.querySelector('.avg-box .avg-row .avg-item:first-child small:first-child');
                 const avgUnit = document.querySelector('.avg-box .avg-row .avg-item:first-child small:last-child');
@@ -2269,6 +2278,7 @@
                 if (avgUnit) avgUnit.textContent = 'kgDM/ha';
                 if (growthLabel) growthLabel.textContent = 'GROWTH';
                 if (growthUnit) growthUnit.textContent = 'kg/day';
+                if (document.getElementById('secondary-avg-row')) document.getElementById('secondary-avg-row').style.display = 'flex';
             }
 
             // UI Toggles
@@ -2623,10 +2633,15 @@
             });
 
             let tWCover = 0, tAreaC = 0, tWGrowth = 0, tAreaG = 0;
+            let totalFarmArea = 0, totalOutArea = 0;
             sorted.forEach(p => {
-                if (p.area > 0 && !p.isOut) {
-                    tWCover += (p.latest.cover * p.area); tAreaC += p.area;
-                    if (p.growthRate && p.growthRate > 0) { tWGrowth += (p.growthRate * p.area); tAreaG += p.area; }
+                const areaNum = p.area || 0;
+                totalFarmArea += areaNum;
+                if (p.isOut) {
+                    totalOutArea += areaNum;
+                } else if (areaNum > 0) {
+                    tWCover += (p.latest.cover * areaNum); tAreaC += areaNum;
+                    if (p.growthRate && p.growthRate > 0) { tWGrowth += (p.growthRate * areaNum); tAreaG += areaNum; }
                 }
             });
 
@@ -2635,6 +2650,10 @@
             const avgGrowthVal = tAreaG > 0 ? Math.round(tWGrowth / tAreaG) : 0;
 
             document.getElementById('total-avg').innerText = avgCoverVal.toLocaleString();
+            
+            // Populate new metrics
+            if (document.getElementById('total-farm-area')) document.getElementById('total-farm-area').innerText = totalFarmArea.toFixed(1);
+            if (document.getElementById('total-out-rotation')) document.getElementById('total-out-rotation').innerText = totalOutArea.toFixed(1);
             document.getElementById('avg-growth').innerText = "+" + avgGrowthVal;
             document.getElementById('sync-time').innerText = new Date().toLocaleTimeString();
 
@@ -4136,6 +4155,10 @@
             if (growthLabel) growthLabel.textContent = 'EST. ROUND';
             if (growthUnit) growthUnit.textContent = 'days';
             document.getElementById('avg-growth').innerText = estRound;
+            
+            // Hide secondary row in breaks mode to save vertical space
+            if (document.getElementById('secondary-avg-row')) document.getElementById('secondary-avg-row').style.display = 'none';
+
             let html = '';
 
             html += '<div style="display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; padding-bottom:5px;">';
