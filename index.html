@@ -3393,17 +3393,34 @@
                     .then(data => {
                         if (data && Array.isArray(data.breaks)) {
                             console.log("Cloud breaks received:", data.breaks.length);
-                            // Merge: Keep local ones, add missing ones from cloud
-                            let merged = [...savedBreaks];
-                            data.breaks.forEach(cb => {
-                                if (!merged.find(lb => lb.id === cb.id)) {
-                                    merged.push(cb);
+                            
+                            const cloudIds = new Set(data.breaks.map(b => String(b.id || "")));
+                            const now = Date.now();
+                            const bufferMs = 60 * 60 * 1000; // 1 hour buffer for "newly created but not yet synced"
+
+                            // Start with cloud list as the primary truth
+                            let finalBreaks = [...data.breaks];
+                            
+                            // Merge in manual local breaks ONLY if they are very new (might be syncing soon)
+                            savedBreaks.forEach(lb => {
+                                if (lb && lb.id && !cloudIds.has(String(lb.id))) {
+                                    const created = lb.createdAt ? new Date(lb.createdAt).getTime() : 0;
+                                    if (now - created < bufferMs) {
+                                        finalBreaks.push(lb);
+                                    } else {
+                                        console.log("Sync: Removing local break deleted in cloud:", lb.id);
+                                    }
                                 }
                             });
-                            // Sort by created date descending
-                            merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                             
-                            savedBreaks = merged;
+                            // Authoritative Sort
+                            finalBreaks.sort((a, b) => {
+                                const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                                const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                                return db - da; 
+                            });
+                            
+                            savedBreaks = finalBreaks;
                             localStorage.setItem('farm_breaks', JSON.stringify(savedBreaks));
                             
                             if (currentDashboardMode === 'breaks') {
