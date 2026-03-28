@@ -2903,8 +2903,12 @@
         function handleMapHoldStart(e) {
             if (!isDrawingBreak || currentDrawingMode !== 'polygon') return;
             
-            // Pointer events are the most modern and robust
-            const ev = e.originalEvent || e;
+            // Handle both pointer and touch events
+            let ev = e.originalEvent || e;
+            if (e.type && e.type.startsWith('touch') && ev.touches && ev.touches.length > 0) {
+                ev = ev.touches[0];
+            }
+            
             const containerPoint = e.containerPoint || map.mouseEventToContainerPoint(ev);
             const latlng = e.latlng || map.mouseEventToLatLng(ev);
             
@@ -2947,7 +2951,12 @@
 
         function handleMapHoldMove(e) {
             if (!mapHoldTimer || !mapHoldStartPos) return;
-            const ev = e.originalEvent || e;
+            
+            let ev = e.originalEvent || e;
+            if (e.type && e.type.startsWith('touch') && ev.touches && ev.touches.length > 0) {
+                ev = ev.touches[0];
+            }
+            
             const pos = e.containerPoint || map.mouseEventToContainerPoint(ev);
             // Increased slop distance slightly to 30 to prevent natural finger wobble from canceling the hold
             if (mapHoldStartPos.distanceTo(pos) > 30) {
@@ -3602,11 +3611,18 @@
             const cont = map.getContainer();
             cont.style.touchAction = 'none'; // CRITICAL: Stop browser from stealing long-press/panning
             
-            cont.addEventListener('pointerdown', handleMapHoldStart, true);
-            cont.addEventListener('pointermove', handleMapHoldMove, true);
-            cont.addEventListener('pointerup', cancelMapHold, true);
-            cont.addEventListener('pointerleave', cancelMapHold, true);
-            cont.addEventListener('pointercancel', cancelMapHold, true);
+            const opts = { capture: true, passive: false };
+            cont.addEventListener('pointerdown', handleMapHoldStart, opts);
+            cont.addEventListener('pointermove', handleMapHoldMove, opts);
+            cont.addEventListener('pointerup', cancelMapHold, opts);
+            cont.addEventListener('pointerleave', cancelMapHold, opts);
+            cont.addEventListener('pointercancel', cancelMapHold, opts);
+            
+            // Add explicit touch event listeners for better mobile support
+            cont.addEventListener('touchstart', handleMapHoldStart, opts);
+            cont.addEventListener('touchmove', handleMapHoldMove, opts);
+            cont.addEventListener('touchend', cancelMapHold, opts);
+            cont.addEventListener('touchcancel', cancelMapHold, opts);
         }
 
         let ignoreNextMapClickTimeout = 0;
@@ -3707,11 +3723,17 @@
             const cont = map.getContainer();
             cont.style.touchAction = '';
             
-            cont.removeEventListener('pointerdown', handleMapHoldStart, true);
-            cont.removeEventListener('pointermove', handleMapHoldMove, true);
-            cont.removeEventListener('pointerup', cancelMapHold, true);
-            cont.removeEventListener('pointerleave', cancelMapHold, true);
-            cont.removeEventListener('pointercancel', cancelMapHold, true);
+            const opts = { capture: true, passive: false };
+            cont.removeEventListener('pointerdown', handleMapHoldStart, opts);
+            cont.removeEventListener('pointermove', handleMapHoldMove, opts);
+            cont.removeEventListener('pointerup', cancelMapHold, opts);
+            cont.removeEventListener('pointerleave', cancelMapHold, opts);
+            cont.removeEventListener('pointercancel', cancelMapHold, opts);
+
+            cont.removeEventListener('touchstart', handleMapHoldStart, opts);
+            cont.removeEventListener('touchmove', handleMapHoldMove, opts);
+            cont.removeEventListener('touchend', cancelMapHold, opts);
+            cont.removeEventListener('touchcancel', cancelMapHold, opts);
 
             cancelMapHold();
             setBreakFullscreen(false);
@@ -4145,6 +4167,14 @@
                         breakLayers.push(null); 
                         return; 
                     }
+                } else {
+                    if (!brk.createdAt) { breakLayers.push(null); return; }
+                    const ts = new Date(brk.createdAt).getTime();
+                    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                    if (ts < oneWeekAgo) {
+                        breakLayers.push(null); 
+                        return; 
+                    }
                 }
                 
                 const coords = brk.vertices.map(v => [v.lat, v.lng]);
@@ -4305,15 +4335,17 @@
 
             savedBreaks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-            let groupBreaks = activeBreakGroup === 'all' ? savedBreaks : savedBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
-            
-            if (weeklyFilterRange) {
-                groupBreaks = groupBreaks.filter(b => {
-                    if (!b.createdAt) return false;
-                    const ts = new Date(b.createdAt).getTime();
+            const visibleBreaks = savedBreaks.filter(b => {
+                if (!b.createdAt) return false;
+                const ts = new Date(b.createdAt).getTime();
+                if (weeklyFilterRange) {
                     return ts >= weeklyFilterRange.start && ts < weeklyFilterRange.end;
-                });
-            }
+                } else {
+                    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                    return ts >= oneWeekAgo;
+                }
+            });
+            let groupBreaks = activeBreakGroup === 'all' ? visibleBreaks : visibleBreaks.filter(b => (b.group || '1st') === activeBreakGroup);
 
             const count = groupBreaks.length;
 
@@ -4348,7 +4380,7 @@
                 const isActive = g.id === activeBreakGroup;
                 const borderStyle = isActive ? '#000' : 'transparent';
                 const weight = isActive ? 'bold' : 'normal';
-                const gCount = g.id === 'all' ? savedBreaks.length : savedBreaks.filter(b => (b.group || '1st') === g.id).length;
+                const gCount = g.id === 'all' ? visibleBreaks.length : visibleBreaks.filter(b => (b.group || '1st') === g.id).length;
                 
                 html += `<button style="flex:1; min-width:65px; padding:6px 2px; font-size:10px; font-weight:${weight}; cursor:pointer; background:${g.color}; border:2px solid ${borderStyle}; color:#fff; border-radius:6px; transition:0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.1);" onclick="setActiveBreakGroup('${g.id}')">
                     ${g.name}<br><span style="font-size:8px; opacity:0.8;">(${gCount})</span>
@@ -4609,7 +4641,9 @@
                                 const user = brk.lastEditedBy || brk.createdBy || '???';
                                 const firstName = user.toUpperCase().split(' ')[0];
                                 const status = brk.lastEditedBy ? 'EDITED' : 'CREATED';
-                                return `${firstName} ${status}`;
+                                const ts = brk.lastEditedAt ? new Date(brk.lastEditedAt) : (brk.createdAt ? new Date(brk.createdAt) : null);
+                                const dateStr = ts ? ts.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }).toUpperCase() : '';
+                                return `${firstName} ${status}${dateStr ? ' \u2022 ' + dateStr : ''}`;
                             })()}
                         </div>
                     </div>
