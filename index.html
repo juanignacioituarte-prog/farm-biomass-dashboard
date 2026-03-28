@@ -1229,6 +1229,18 @@
         </div>
     </div>
 
+    <!-- Paddock Selection Confirmation Modal -->
+    <div id="confirm-paddock-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; align-items:center; justify-content:center;">
+        <div style="background:white; padding:20px; border-radius:12px; width:80%; max-width:300px; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
+            <h3 style="margin-top:0; color:#2c3e50;">Select Whole Paddock?</h3>
+            <p id="confirm-paddock-name" style="color:#7f8c8d; font-size:14px; margin-bottom:20px; font-weight:bold;">Paddock</p>
+            <div style="display:flex; gap:10px;">
+                <button id="btn-cancel-paddock" style="flex:1; padding:10px; background:#f5f5f5; border:1px solid #ddd; border-radius:6px; color:#555; font-weight:bold; cursor:pointer;">CANCEL</button>
+                <button id="btn-confirm-paddock" style="flex:1; padding:10px; background:#8e44ad; border:none; border-radius:6px; color:white; font-weight:bold; cursor:pointer;">SELECT</button>
+            </div>
+        </div>
+    </div>
+
     <div id="login-screen">
         <img src="icon-512.png" alt="Logo" style="width: 120px; border-radius: 20px; margin-bottom: 20px;">
         <h2>River Terrace Farm App</h2>
@@ -1243,7 +1255,7 @@
             <div id="debug-email" style="font-size:13px; color:#666; margin-bottom:10px; background:#f0f0f0; padding:5px; border-radius:4px; font-family:monospace;">Checking...</div>
             <p style="font-size:12px; margin-bottom: 10px;">If this is your first time, the Admin needs to approve your email.</p>
             <a href="#" id="request-access-btn" class="btn-request-access" target="_blank" style="margin-top:0;">Request Access</a>
-            <div style="margin-top:10px; font-size:10px; color:#999;">App Version: 1.0.16</div>
+            <div style="margin-top:10px; font-size:10px; color:#999;">App Version: 1.0.18</div>
         </div>
     </div>
 
@@ -2904,19 +2916,32 @@
                 mapHoldPaddock = pName;
                 
                 // VIBRATE to confirm "Hold Started"
-                if (navigator.vibrate) navigator.vibrate(200);
+                if (navigator.vibrate) navigator.vibrate(100);
                 
                 // Visual feedback: white high-opacity highlight
                 paddockMap[pName].setStyle({ fillColor: 'white', fillOpacity: 0.6, weight: 4 });
                 
                 mapHoldTimer = setTimeout(() => {
-                    selectWholePaddockForBreak(pName);
                     if (paddockMap[pName]) paddockMap[pName].setStyle({ fillColor: 'white', fillOpacity: 0.1, weight: 1.5 });
                     // SUCCESS haptic feedback
                     if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+                    
+                    // Show confirmation modal instead of selecting immediately
+                    document.getElementById('confirm-paddock-name').innerText = pName;
+                    document.getElementById('confirm-paddock-modal').style.display = 'flex';
+                    
+                    document.getElementById('btn-confirm-paddock').onclick = () => {
+                        document.getElementById('confirm-paddock-modal').style.display = 'none';
+                        selectWholePaddockForBreak(pName);
+                    };
+                    
+                    document.getElementById('btn-cancel-paddock').onclick = () => {
+                        document.getElementById('confirm-paddock-modal').style.display = 'none';
+                    };
+
                     mapHoldTimer = null;
                     mapHoldPaddock = null;
-                }, 3000);
+                }, 1500); // Changed from 4000ms to 1500ms so it appears faster
             }
         }
 
@@ -2924,8 +2949,8 @@
             if (!mapHoldTimer || !mapHoldStartPos) return;
             const ev = e.originalEvent || e;
             const pos = e.containerPoint || map.mouseEventToContainerPoint(ev);
-            // Increase slop for natural wobble
-            if (mapHoldStartPos.distanceTo(pos) > 40) {
+            // Increased slop distance slightly to 30 to prevent natural finger wobble from canceling the hold
+            if (mapHoldStartPos.distanceTo(pos) > 30) {
                 cancelMapHold();
             }
         }
