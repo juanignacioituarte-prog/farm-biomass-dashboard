@@ -745,6 +745,60 @@
             font-weight: 600;
         }
 
+        .crosshair-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+            pointer-events: none;
+            display: none;
+            width: 40px;
+            height: 40px;
+        }
+
+        .crosshair-overlay svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.5));
+        }
+
+        .break-toolbar .btn-drop {
+            background: #e74c3c;
+            color: white;
+            font-size: 14px;
+            padding: 10px 20px;
+            display: none;
+            border: 2px solid white;
+            animation: pulse-border 1.5s infinite;
+        }
+        
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        .toolbar-toggles {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 10px;
+            color: white;
+            align-items: flex-start;
+            margin-right: 5px;
+        }
+        .toolbar-toggles label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+        .toolbar-toggles input[type="checkbox"] {
+            margin: 0;
+            cursor: pointer;
+        }
+
         .btn-new-break {
             width: 100%;
             padding: 12px;
@@ -1260,6 +1314,15 @@
     </div>
 
     <div id="map">
+        <div id="crosshair-overlay" class="crosshair-overlay">
+            <svg viewBox="0 0 100 100" fill="none" stroke="red" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="50" cy="50" r="10" stroke="red" fill="rgba(255,0,0,0.3)"/>
+                <line x1="50" y1="0" x2="50" y2="35" />
+                <line x1="50" y1="65" x2="50" y2="100" />
+                <line x1="0" y1="50" x2="35" y2="50" />
+                <line x1="65" y1="50" x2="100" y2="50" />
+            </svg>
+        </div>
         <button id="btn-gps" class="btn-gps" onclick="toggleGPS()" title="Show my location">📍</button>
         <div class="map-controls">
             <div id="latest-date" class="date-label">LATEST DATA: --</div>
@@ -1683,6 +1746,9 @@
 
         let savedBreaks = [];
         let isDrawingBreak = false;
+        let useCrosshairMode = false;
+        let lockBreakPoints = false;
+        let lastTapTime = 0;
         let currentDrawingMode = 'polygon';
         let drawingVertices = [];
         let drawingMarkers = [];
@@ -3566,7 +3632,7 @@
             const gColor = getGroupColor(activeBreakGroup);
             drawingVertices.forEach((v, idx) => {
                 const marker = L.marker([v.lat, v.lng], {
-                    draggable: true,
+                    draggable: !lockBreakPoints,
                     icon: L.divIcon({
                         className: 'break-vertex-icon',
                         html: `<div style="background:${gColor}; width:10px; height:10px; border-radius:50%; border:2px solid white; box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>`,
@@ -3592,6 +3658,7 @@
 
                 marker.on('click', (ev) => {
                     L.DomEvent.stopPropagation(ev); // Prevent map from catching the click
+                    if (lockBreakPoints) return; // Prevent deleting when points are locked
                     drawingVertices.splice(idx, 1);
                     rebuildDrawingMarkers();
                 });
@@ -3641,16 +3708,48 @@
         let ignoreNextMapClickTimeout = 0;
         function onMapClickForBreak(e) {
             if (!isDrawingBreak) return;
+            if (useCrosshairMode) return; // Ignore taps when in crosshair mode, rely on btn
             if (Date.now() < ignoreNextMapClickTimeout) return;
+            
+            // Anti-ghost-touch debouncing
+            if (Date.now() - lastTapTime < 500) return;
+            lastTapTime = Date.now();
+            
             const latLng = e.latlng;
             drawingVertices.push({ lat: latLng.lat, lng: latLng.lng });
             rebuildDrawingMarkers();
+            
+            if (navigator.vibrate) navigator.vibrate(20);
         }
 
         function undoLastVertex() {
             if (drawingVertices.length === 0) return;
             drawingVertices.pop();
             rebuildDrawingMarkers();
+        }
+
+        function toggleCrosshairMode(isActive) {
+            useCrosshairMode = isActive;
+            document.getElementById('crosshair-overlay').style.display = isActive ? 'block' : 'none';
+            document.getElementById('btn-drop-point').style.display = isActive ? 'block' : 'none';
+        }
+
+        function toggleLockPoints(isActive) {
+            lockBreakPoints = isActive;
+            rebuildDrawingMarkers();
+        }
+
+        function addPointFromCrosshair() {
+            if (!isDrawingBreak || !useCrosshairMode) return;
+            
+            if (Date.now() - lastTapTime < 500) return;
+            lastTapTime = Date.now();
+            
+            const center = map.getCenter();
+            drawingVertices.push({ lat: center.lat, lng: center.lng });
+            rebuildDrawingMarkers();
+            
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]); // Distinct vib for drop point
         }
 
         function finishBreak() {
@@ -5051,6 +5150,11 @@
 
     <!-- Break Drawing Toolbar (Moved Outside Map for Z-Index Stability) -->
     <div id="break-toolbar" class="break-toolbar" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+        <div class="toolbar-toggles">
+            <label><input type="checkbox" id="toggle-crosshair" onchange="toggleCrosshairMode(this.checked)"> 🎯 Use Crosshair</label>
+            <label><input type="checkbox" id="toggle-lock-pts" onchange="toggleLockPoints(this.checked)"> 🔒 Lock Points</label>
+        </div>
+        <button class="btn-drop" id="btn-drop-point" onclick="event.stopPropagation(); addPointFromCrosshair()">DROP POINT</button>
         <span class="vertex-count" id="vertex-count">0 points</span>
         <button class="btn-undo" onclick="event.stopPropagation(); undoLastVertex()">↩ Undo</button>
         <button class="btn-done" id="btn-follow-contour" style="background:#2ecc71; color:white; display:none;" onclick="followPaddockContour()">⬡ Follow Contour</button>
