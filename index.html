@@ -2910,6 +2910,12 @@
         function handleMapHoldStart(e) {
             if (!isDrawingBreak || currentDrawingMode !== 'polygon') return;
             
+            // Prevent double-firing timers from touch+pointer events on mobile which leads to "phantom" whole paddock selections
+            if (mapHoldTimer) {
+                clearTimeout(mapHoldTimer);
+                mapHoldTimer = null;
+            }
+            
             // Handle both pointer and touch events
             let ev = e.originalEvent || e;
             if (e.type && e.type.startsWith('touch') && ev.touches && ev.touches.length > 0) {
@@ -2952,7 +2958,7 @@
 
                     mapHoldTimer = null;
                     mapHoldPaddock = null;
-                }, 1500); // Changed from 4000ms to 1500ms so it appears faster
+                }, 2000); // Changed to 2000ms to be less sensitive to accidental touches
             }
         }
 
@@ -2965,8 +2971,8 @@
             }
             
             const pos = e.containerPoint || map.mouseEventToContainerPoint(ev);
-            // Increased slop distance slightly to 30 to prevent natural finger wobble from canceling the hold
-            if (mapHoldStartPos.distanceTo(pos) > 30) {
+            // Changed slop distance down to 20 to more easily cancel a hold when naturally dragging on mobile
+            if (mapHoldStartPos.distanceTo(pos) > 20) {
                 cancelMapHold();
             }
         }
